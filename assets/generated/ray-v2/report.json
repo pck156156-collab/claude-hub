@@ -1,0 +1,201 @@
+{
+ "scale": 0.03711340206185567,
+ "frames": {
+  "idle_0": {
+   "size": [
+    24,
+    36
+   ],
+   "clipped": false
+  },
+  "idle_1": {
+   "size": [
+    24,
+    36
+   ],
+   "clipped": false
+  },
+  "run_0": {
+   "size": [
+    28,
+    35
+   ],
+   "clipped": false
+  },
+  "run_1": {
+   "size": [
+    29,
+    35
+   ],
+   "clipped": false
+  },
+  "run_2": {
+   "size": [
+    29,
+    36
+   ],
+   "clipped": false
+  },
+  "run_3": {
+   "size": [
+    29,
+    36
+   ],
+   "clipped": false
+  },
+  "run_4": {
+   "size": [
+    28,
+    36
+   ],
+   "clipped": false
+  },
+  "run_5": {
+   "size": [
+    29,
+    36
+   ],
+   "clipped": false
+  },
+  "run_6": {
+   "size": [
+    29,
+    36
+   ],
+   "clipped": false
+  },
+  "run_7": {
+   "size": [
+    29,
+    36
+   ],
+   "clipped": false
+  },
+  "fire": {
+   "size": [
+    31,
+    36
+   ],
+   "clipped": false
+  },
+  "aim_up": {
+   "size": [
+    25,
+    37
+   ],
+   "clipped": false
+  },
+  "crouch": {
+   "size": [
+    25,
+    27
+   ],
+   "clipped": false
+  },
+  "jump_fwd": {
+   "size": [
+    25,
+    32
+   ],
+   "clipped": false
+  },
+  "jump_up": {
+   "size": [
+    21,
+    31
+   ],
+   "clipped": false
+  },
+  "jump_down": {
+   "size": [
+    22,
+    30
+   ],
+   "clipped": false
+  },
+  "knife_0": {
+   "size": [
+    26,
+    36
+   ],
+   "clipped": false
+  },
+  "knife_1": {
+   "size": [
+    31,
+    36
+   ],
+   "clipped": false
+  },
+  "knife_2": {
+   "size": [
+    25,
+    36
+   ],
+   "clipped": false
+  },
+  "throw_0": {
+   "size": [
+    23,
+    36
+   ],
+   "clipped": false
+  },
+  "throw_1": {
+   "size": [
+    21,
+    36
+   ],
+   "clipped": false
+  },
+  "throw_2": {
+   "size": [
+    26,
+    36
+   ],
+   "clipped": false
+  },
+  "die_0": {
+   "size": [
+    28,
+    36
+   ],
+   "clipped": false
+  },
+  "die_1": {
+   "size": [
+    27,
+    35
+   ],
+   "clipped": false
+  },
+  "die_2": {
+   "size": [
+    33,
+    33
+   ],
+   "clipped": false
+  },
+  "die_3": {
+   "size": [
+    35,
+    22
+   ],
+   "clipped": false
+  },
+  "die_4": {
+   "size": [
+    34,
+    20
+   ],
+   "clipped": false
+  },
+  "die_5": {
+   "size": [
+    36,
+    14
+   ],
+   "clipped": false
+  }
+ }
+}

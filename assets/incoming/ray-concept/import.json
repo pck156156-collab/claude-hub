@@ -1,0 +1,86 @@
+{
+ "src": "assets/incoming/ray-concept",
+ "out": "assets/generated/ray-v2",
+ "frame": [
+  40,
+  44
+ ],
+ "height": 36,
+ "reference": "idle_0",
+ "poses": {
+  "idle_0": "ray-idle-generated-v1.png",
+  "idle_1": "ray-idle-exhale-concept.png",
+  "run_0": [
+   "ray-run-8-concept.png",
+   0
+  ],
+  "run_1": [
+   "ray-run-8-concept.png",
+   1
+  ],
+  "run_2": [
+   "ray-run-8-concept.png",
+   2
+  ],
+  "run_3": [
+   "ray-run-8-concept.png",
+   3
+  ],
+  "run_4": [
+   "ray-run-8-concept.png",
+   4
+  ],
+  "run_5": [
+   "ray-run-8-concept.png",
+   5
+  ],
+  "run_6": [
+   "ray-run-8-concept.png",
+   6
+  ],
+  "run_7": [
+   "ray-run-8-concept.png",
+   7
+  ],
+  "fire": "ray-pistol-fire-concept.png",
+  "aim_up": "ray-pistol-aim-up-v2.png",
+  "crouch": "ray-pistol-crouch-concept.png",
+  "jump_fwd": "ray-jump-forward-concept.png",
+  "jump_up": "ray-jump-up-concept.png",
+  "jump_down": "ray-jump-down-concept.png",
+  "knife_0": "ray-knife-0-concept.png",
+  "knife_1": "ray-knife-1-concept.png",
+  "knife_2": "ray-knife-2-concept.png",
+  "throw_0": "ray-throw-0-concept.png",
+  "throw_1": "ray-throw-1-concept.png",
+  "throw_2": "ray-throw-2-concept.png",
+  "die_0": [
+   "ray-fall-6-concept.png",
+   0
+  ],
+  "die_1": [
+   "ray-fall-6-concept.png",
+   1
+  ],
+  "die_2": [
+   "ray-fall-6-concept.png",
+   2
+  ],
+  "die_3": [
+   "ray-fall-6-concept.png",
+   3
+  ],
+  "die_4": [
+   "ray-fall-6-concept.png",
+   4
+  ],
+  "die_5": [
+   "ray-fall-6-concept.png",
+   5
+  ]
+ },
+ "sheet_heights": {
+  "ray-run-8-concept.png": 36,
+  "ray-fall-6-concept.png": 36
+ }
+}

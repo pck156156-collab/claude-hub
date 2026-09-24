@@ -1,0 +1,6 @@
+Same Ray as supplied reference: young adult chibi soldier, short brown hair, red bandana with two tails, olive tactical vest, khaki shirt and cargo pants, brown boots. Facing right, side view with slight 3/4 turn toward viewer. Single full body sprite, standing grounded. An OVERHAND GRENADE THROW animation pose. Use the visible near-side RIGHT arm as throwing arm consistently. No pistol visible during throw; other hand relaxed near vest. Small olive round grenade with dark outline.
+Preserve character identity, head size, clothing, body horizontal center, same grounded feet position and canvas framing for all poses. Requested logical 40x44 canvas, standing body about 36 pixels tall, feet bottom y43, hips x20; display upscaled 8x to 320x352. True coarse pixel art with hard solid pixel blocks, no antialiasing, blur, gradients or texture, 1 logical pixel dark #1B1B22 outline, max 16 character colors from reference palette. Solid opaque flat magenta #FF00FF background, not transparent or black. No shadow, text, labels, duplicate characters or explosion.
+
+0: Wind-up, grenade held behind shoulder, elbow back, eyes right.
+1: Same throwing arm raised above head, grenade still held, fixed feet and scale.
+2: Same arm follows through forward, empty open hand, no grenade, slight torso lean, fixed feet.

@@ -1,0 +1,5 @@
+Edit reference into one Ray combat-knife slash animation pose. Same original chibi adult hero: brown short hair, red two-tail bandana, olive vest, khaki shirt/cargo pants, brown boots. Right-facing side view slightly turned toward viewer. Use near-side right hand holding a short steel combat knife consistently; no pistol or grenade. Keep head size, clothes, body center and grounded boot positions consistent. Requested 40x44 logical canvas, body ~36 pixels tall, bottom soles y43, hips x20. Display enlarged 8x to 320x352, true coarse pixel art, hard square pixel blocks, no antialiasing blur gradients texture. One logical pixel #1B1B22 outline, at most sixteen reference palette colors. Flat opaque pure magenta #FF00FF background, not transparent. No text, ground shadow, enemies, blood or extra frames.
+
+Frame 0: Anticipation, knife pulled back near shoulder, blade up, knees slightly bent.
+Frame 1: Active forward downward slash with same arm, small pale gray slash arc, fixed boots.
+Frame 2: Follow-through, same hand lowered before hip, blade diagonally down right, remove arc, fixed boots.

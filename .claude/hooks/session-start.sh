@@ -18,7 +18,7 @@ if [ ${#need[@]} -gt 0 ]; then
   DEBIAN_FRONTEND=noninteractive apt-get install -y -q "${need[@]}"
 fi
 
-python3 -c "import PIL" 2>/dev/null || pip install -q pillow
+python3 -c "import PIL, numpy" 2>/dev/null || pip install -q --ignore-installed pillow numpy
 
 # Web game stack: Phaser (2D), Three.js (3D), Vite, Playwright (screenshots).
 npm install --no-audit --no-fund
