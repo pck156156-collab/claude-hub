@@ -6,7 +6,8 @@
     "dev": "vite",
     "build": "vite build",
     "shot": "node tools/screenshot.mjs",
-    "check": "node tools/check-templates.mjs"
+    "check": "node tools/check-templates.mjs",
+    "build:iron-raid": "node games/iron-raid/build-publish.mjs"
   },
   "dependencies": {
     "phaser": "^4.2.1",
