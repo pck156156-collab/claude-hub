@@ -1,0 +1,730 @@
+{
+ "note": "Frame sequences and timings the game code uses. fps 0 = a held pose or code-timed switch (see note). Frame names must exist in the texture atlas.",
+ "animations": {
+  "player": {
+   "p_idle": {
+    "frames": [
+     "p_idle_0",
+     "p_idle_1"
+    ],
+    "fps": 2.5,
+    "loop": true,
+    "note": "standing, pistol"
+   },
+   "p_run_fwd": {
+    "frames": [
+     "p_run_fwd_0_0",
+     "p_run_fwd_0_1",
+     "p_run_fwd_0_2",
+     "p_run_fwd_0_3",
+     "p_run_fwd_0_4",
+     "p_run_fwd_0_5",
+     "p_run_fwd_0_6",
+     "p_run_fwd_0_7"
+    ],
+    "fps": 12,
+    "loop": true,
+    "note": "running, aim fwd; the _1_ set (muzzle flash) replaces it for 0.06s after each shot"
+   },
+   "p_stand_fwd": {
+    "frames": [
+     "p_stand_fwd_0"
+    ],
+    "fps": 0,
+    "loop": false,
+    "note": "held pose; _1 = muzzle flash frame"
+   },
+   "p_run_up": {
+    "frames": [
+     "p_run_up_0_0",
+     "p_run_up_0_1",
+     "p_run_up_0_2",
+     "p_run_up_0_3",
+     "p_run_up_0_4",
+     "p_run_up_0_5",
+     "p_run_up_0_6",
+     "p_run_up_0_7"
+    ],
+    "fps": 12,
+    "loop": true,
+    "note": "running, aim up; the _1_ set (muzzle flash) replaces it for 0.06s after each shot"
+   },
+   "p_stand_up": {
+    "frames": [
+     "p_stand_up_0"
+    ],
+    "fps": 0,
+    "loop": false,
+    "note": "held pose; _1 = muzzle flash frame"
+   },
+   "p_crouch": {
+    "frames": [
+     "p_crouch_fwd_0"
+    ],
+    "fps": 0,
+    "loop": false,
+    "note": "held pose; _1 = muzzle flash"
+   },
+   "p_jump_fwd": {
+    "frames": [
+     "p_jump_fwd_0"
+    ],
+    "fps": 0,
+    "loop": false,
+    "note": "held while airborne; _1 = muzzle flash"
+   },
+   "p_jump_up": {
+    "frames": [
+     "p_jump_up_0"
+    ],
+    "fps": 0,
+    "loop": false,
+    "note": "held while airborne; _1 = muzzle flash"
+   },
+   "p_jump_down": {
+    "frames": [
+     "p_jump_down_0"
+    ],
+    "fps": 0,
+    "loop": false,
+    "note": "held while airborne; _1 = muzzle flash"
+   },
+   "r_idle": {
+    "frames": [
+     "r_idle_0",
+     "r_idle_1"
+    ],
+    "fps": 2.5,
+    "loop": true,
+    "note": "standing, heavy rifle"
+   },
+   "r_run_fwd": {
+    "frames": [
+     "r_run_fwd_0_0",
+     "r_run_fwd_0_1",
+     "r_run_fwd_0_2",
+     "r_run_fwd_0_3",
+     "r_run_fwd_0_4",
+     "r_run_fwd_0_5",
+     "r_run_fwd_0_6",
+     "r_run_fwd_0_7"
+    ],
+    "fps": 12,
+    "loop": true,
+    "note": "running, aim fwd; the _1_ set (muzzle flash) replaces it for 0.06s after each shot"
+   },
+   "r_stand_fwd": {
+    "frames": [
+     "r_stand_fwd_0"
+    ],
+    "fps": 0,
+    "loop": false,
+    "note": "held pose; _1 = muzzle flash frame"
+   },
+   "r_run_up": {
+    "frames": [
+     "r_run_up_0_0",
+     "r_run_up_0_1",
+     "r_run_up_0_2",
+     "r_run_up_0_3",
+     "r_run_up_0_4",
+     "r_run_up_0_5",
+     "r_run_up_0_6",
+     "r_run_up_0_7"
+    ],
+    "fps": 12,
+    "loop": true,
+    "note": "running, aim up; the _1_ set (muzzle flash) replaces it for 0.06s after each shot"
+   },
+   "r_stand_up": {
+    "frames": [
+     "r_stand_up_0"
+    ],
+    "fps": 0,
+    "loop": false,
+    "note": "held pose; _1 = muzzle flash frame"
+   },
+   "r_crouch": {
+    "frames": [
+     "r_crouch_fwd_0"
+    ],
+    "fps": 0,
+    "loop": false,
+    "note": "held pose; _1 = muzzle flash"
+   },
+   "r_jump_fwd": {
+    "frames": [
+     "r_jump_fwd_0"
+    ],
+    "fps": 0,
+    "loop": false,
+    "note": "held while airborne; _1 = muzzle flash"
+   },
+   "r_jump_up": {
+    "frames": [
+     "r_jump_up_0"
+    ],
+    "fps": 0,
+    "loop": false,
+    "note": "held while airborne; _1 = muzzle flash"
+   },
+   "r_jump_down": {
+    "frames": [
+     "r_jump_down_0"
+    ],
+    "fps": 0,
+    "loop": false,
+    "note": "held while airborne; _1 = muzzle flash"
+   },
+   "b_idle": {
+    "frames": [
+     "b_idle_0",
+     "b_idle_1"
+    ],
+    "fps": 2.5,
+    "loop": true,
+    "note": "standing, scatter gun / rocket"
+   },
+   "b_run_fwd": {
+    "frames": [
+     "b_run_fwd_0_0",
+     "b_run_fwd_0_1",
+     "b_run_fwd_0_2",
+     "b_run_fwd_0_3",
+     "b_run_fwd_0_4",
+     "b_run_fwd_0_5",
+     "b_run_fwd_0_6",
+     "b_run_fwd_0_7"
+    ],
+    "fps": 12,
+    "loop": true,
+    "note": "running, aim fwd; the _1_ set (muzzle flash) replaces it for 0.06s after each shot"
+   },
+   "b_stand_fwd": {
+    "frames": [
+     "b_stand_fwd_0"
+    ],
+    "fps": 0,
+    "loop": false,
+    "note": "held pose; _1 = muzzle flash frame"
+   },
+   "b_run_up": {
+    "frames": [
+     "b_run_up_0_0",
+     "b_run_up_0_1",
+     "b_run_up_0_2",
+     "b_run_up_0_3",
+     "b_run_up_0_4",
+     "b_run_up_0_5",
+     "b_run_up_0_6",
+     "b_run_up_0_7"
+    ],
+    "fps": 12,
+    "loop": true,
+    "note": "running, aim up; the _1_ set (muzzle flash) replaces it for 0.06s after each shot"
+   },
+   "b_stand_up": {
+    "frames": [
+     "b_stand_up_0"
+    ],
+    "fps": 0,
+    "loop": false,
+    "note": "held pose; _1 = muzzle flash frame"
+   },
+   "b_crouch": {
+    "frames": [
+     "b_crouch_fwd_0"
+    ],
+    "fps": 0,
+    "loop": false,
+    "note": "held pose; _1 = muzzle flash"
+   },
+   "b_jump_fwd": {
+    "frames": [
+     "b_jump_fwd_0"
+    ],
+    "fps": 0,
+    "loop": false,
+    "note": "held while airborne; _1 = muzzle flash"
+   },
+   "b_jump_up": {
+    "frames": [
+     "b_jump_up_0"
+    ],
+    "fps": 0,
+    "loop": false,
+    "note": "held while airborne; _1 = muzzle flash"
+   },
+   "b_jump_down": {
+    "frames": [
+     "b_jump_down_0"
+    ],
+    "fps": 0,
+    "loop": false,
+    "note": "held while airborne; _1 = muzzle flash"
+   },
+   "throw_stand": {
+    "frames": [
+     "throw_stand_0",
+     "throw_stand_1",
+     "throw_stand_2"
+    ],
+    "fps": 10,
+    "loop": false,
+    "note": "grenade throw, 0.3s"
+   },
+   "knife_stand": {
+    "frames": [
+     "knife_stand_0",
+     "knife_stand_1"
+    ],
+    "fps": 9,
+    "loop": false,
+    "note": "knife, 0.22s (frame 0 for 0.08s, frame 1 after)"
+   },
+   "throw_crouch": {
+    "frames": [
+     "throw_crouch_0",
+     "throw_crouch_1",
+     "throw_crouch_2"
+    ],
+    "fps": 10,
+    "loop": false,
+    "note": "grenade throw, 0.3s"
+   },
+   "knife_crouch": {
+    "frames": [
+     "knife_crouch_0",
+     "knife_crouch_1"
+    ],
+    "fps": 9,
+    "loop": false,
+    "note": "knife, 0.22s (frame 0 for 0.08s, frame 1 after)"
+   },
+   "throw_jump": {
+    "frames": [
+     "throw_jump_0",
+     "throw_jump_1",
+     "throw_jump_2"
+    ],
+    "fps": 10,
+    "loop": false,
+    "note": "grenade throw, 0.3s"
+   },
+   "knife_jump": {
+    "frames": [
+     "knife_jump_0",
+     "knife_jump_1"
+    ],
+    "fps": 9,
+    "loop": false,
+    "note": "knife, 0.22s (frame 0 for 0.08s, frame 1 after)"
+   },
+   "die": {
+    "frames": [
+     "die_0",
+     "die_1",
+     "die_2",
+     "die_3",
+     "die_4",
+     "die_5"
+    ],
+    "fps": 10,
+    "loop": false,
+    "note": "then blinks out"
+   },
+   "win": {
+    "frames": [
+     "win_0",
+     "win_1"
+    ],
+    "fps": 3,
+    "loop": true,
+    "note": "mission complete"
+   }
+  },
+  "soldier": {
+   "chat": {
+    "frames": [
+     "chat_0",
+     "chat_1"
+    ],
+    "fps": 2,
+    "loop": true,
+    "note": "idle, chatting"
+   },
+   "alert": {
+    "frames": [
+     "alert_0"
+    ],
+    "fps": 0,
+    "loop": false,
+    "note": "0.5s surprise jump"
+   },
+   "walk": {
+    "frames": [
+     "walk_0",
+     "walk_1",
+     "walk_2",
+     "walk_3",
+     "walk_4",
+     "walk_5",
+     "walk_6",
+     "walk_7"
+    ],
+    "fps": 11,
+    "loop": true,
+    "note": "rifle / grenadier walking"
+   },
+   "knife_run": {
+    "frames": [
+     "kwalk_0",
+     "kwalk_1",
+     "kwalk_2",
+     "kwalk_3",
+     "kwalk_4",
+     "kwalk_5",
+     "kwalk_6",
+     "kwalk_7"
+    ],
+    "fps": 16,
+    "loop": true,
+    "note": "knife soldier running"
+   },
+   "flee": {
+    "frames": [
+     "flee_0",
+     "flee_1",
+     "flee_2",
+     "flee_3",
+     "flee_4",
+     "flee_5",
+     "flee_6",
+     "flee_7"
+    ],
+    "fps": 14,
+    "loop": true,
+    "note": "panic run, 0.9s"
+   },
+   "shoot": {
+    "frames": [
+     "shoot_0",
+     "shoot_1",
+     "shoot_0"
+    ],
+    "fps": 0,
+    "loop": false,
+    "note": "0.5s: shoot_1 (flash) shown 0.25-0.33s, bullet spawns at 0.25s"
+   },
+   "crouch_shoot": {
+    "frames": [
+     "cshoot_0",
+     "cshoot_1",
+     "cshoot_0"
+    ],
+    "fps": 0,
+    "loop": false,
+    "note": "same timing as shoot"
+   },
+   "throw": {
+    "frames": [
+     "throw_0",
+     "throw_1",
+     "throw_2"
+    ],
+    "fps": 6.7,
+    "loop": false,
+    "note": "0.15s per frame, grenade leaves at 0.3s"
+   },
+   "slash": {
+    "frames": [
+     "knife_0",
+     "knife_1"
+    ],
+    "fps": 0,
+    "loop": false,
+    "note": "knife_0 for 0.18s, then knife_1 (hit check) until 0.45s"
+   },
+   "blasted": {
+    "frames": [
+     "hurt_0"
+    ],
+    "fps": 0,
+    "loop": false,
+    "note": "flies up and spins (rotation done in code)"
+   },
+   "die": {
+    "frames": [
+     "die_0",
+     "die_1",
+     "die_2",
+     "die_3",
+     "die_4",
+     "die_5"
+    ],
+    "fps": 12,
+    "loop": false,
+    "note": "then blinks out"
+   }
+  },
+  "pow": {
+   "tied": {
+    "frames": [
+     "tied_0",
+     "tied_1"
+    ],
+    "fps": 1.5,
+    "loop": true
+   },
+   "freed": {
+    "frames": [
+     "free_0"
+    ],
+    "fps": 0,
+    "loop": false,
+    "note": "hops up, 0.5s"
+   },
+   "walk": {
+    "frames": [
+     "run_0",
+     "run_1",
+     "run_2",
+     "run_3",
+     "run_4",
+     "run_5",
+     "run_6",
+     "run_7"
+    ],
+    "fps": 12,
+    "loop": true,
+    "note": "walks to the player"
+   },
+   "give": {
+    "frames": [
+     "give_0"
+    ],
+    "fps": 0,
+    "loop": false,
+    "note": "0.45s, item drops"
+   },
+   "salute": {
+    "frames": [
+     "salute_0"
+    ],
+    "fps": 0,
+    "loop": false,
+    "note": "0.6s"
+   },
+   "run_away": {
+    "frames": [
+     "run_0",
+     "run_1",
+     "run_2",
+     "run_3",
+     "run_4",
+     "run_5",
+     "run_6",
+     "run_7"
+    ],
+    "fps": 18,
+    "loop": true
+   }
+  },
+  "tank": {
+   "move": {
+    "frames": [
+     "tank_0_0",
+     "tank_1_0",
+     "tank_2_0"
+    ],
+    "fps": 14,
+    "loop": true,
+    "note": "tread cycle; _1 suffix = damaged version used when HP < max"
+   }
+  },
+  "apc": {
+   "drive": {
+    "frames": [
+     "apc_0_0",
+     "apc_1_0"
+    ],
+    "fps": 8,
+    "loop": true,
+    "note": "_1 = damaged (HP < 50%), _2 = wreck (apc_0_2 only)"
+   }
+  },
+  "heli": {
+   "rotor": {
+    "frames": [
+     "heli_0",
+     "heli_1",
+     "heli_2"
+    ],
+    "fps": 20,
+    "loop": true
+   }
+  },
+  "boss_core": {
+   "pulse": {
+    "frames": [
+     "core_0",
+     "core_1"
+    ],
+    "fps": 3,
+    "loop": true,
+    "note": "10 fps in phase 2"
+   }
+  },
+  "boss_door": {
+   "open": {
+    "frames": [
+     "door_0",
+     "door_1",
+     "door_2"
+    ],
+    "fps": 0,
+    "loop": false,
+    "note": "code-driven: door_1 then door_2 over 0.6s before a soldier jumps out"
+   }
+  },
+  "sgblast": {
+   "blast": {
+    "frames": [
+     "sg_0",
+     "sg_1",
+     "sg_2",
+     "sg_3"
+    ],
+    "fps": 20,
+    "loop": false,
+    "note": "shotgun cone, 0.05s per frame"
+   }
+  },
+  "boom_s": {
+   "explode": {
+    "frames": [
+     "0",
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7"
+    ],
+    "fps": 18.2,
+    "loop": false,
+    "note": "55ms per frame"
+   }
+  },
+  "boom_l": {
+   "explode": {
+    "frames": [
+     "0",
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9"
+    ],
+    "fps": 18.2,
+    "loop": false,
+    "note": "55ms per frame"
+   }
+  },
+  "smoke": {
+   "puff": {
+    "frames": [
+     "0",
+     "1",
+     "2",
+     "3"
+    ],
+    "fps": 5.7,
+    "loop": false,
+    "note": "over 0.7s while rising and fading"
+   }
+  },
+  "spark": {
+   "hit": {
+    "frames": [
+     "0",
+     "1",
+     "2"
+    ],
+    "fps": 25,
+    "loop": false,
+    "note": "40ms per frame"
+   }
+  },
+  "splash": {
+   "splash": {
+    "frames": [
+     "0",
+     "1",
+     "2",
+     "3",
+     "4"
+    ],
+    "fps": 14.3,
+    "loop": false,
+    "note": "70ms per frame"
+   }
+  },
+  "item_B": {
+   "blink": {
+    "frames": [
+     "0",
+     "1"
+    ],
+    "fps": 4,
+    "loop": true
+   }
+  },
+  "item_S": {
+   "blink": {
+    "frames": [
+     "0",
+     "1"
+    ],
+    "fps": 4,
+    "loop": true
+   }
+  },
+  "item_R": {
+   "blink": {
+    "frames": [
+     "0",
+     "1"
+    ],
+    "fps": 4,
+    "loop": true
+   }
+  },
+  "item_G": {
+   "blink": {
+    "frames": [
+     "0",
+     "1"
+    ],
+    "fps": 4,
+    "loop": true
+   }
+  },
+  "water": {
+   "swap": {
+    "frames": [
+     "water_0",
+     "water_1"
+    ],
+    "fps": 3.3,
+    "loop": true,
+    "note": "two separate textures swapped every 300ms"
+   }
+  }
+ }
+}

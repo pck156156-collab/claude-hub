@@ -1,0 +1,137 @@
+{
+ "frames": {
+  "apc_0_0": {
+   "frame": {
+    "x": 0,
+    "y": 0,
+    "w": 64,
+    "h": 36
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 64,
+    "h": 36
+   },
+   "sourceSize": {
+    "w": 64,
+    "h": 36
+   }
+  },
+  "apc_0_1": {
+   "frame": {
+    "x": 64,
+    "y": 0,
+    "w": 64,
+    "h": 36
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 64,
+    "h": 36
+   },
+   "sourceSize": {
+    "w": 64,
+    "h": 36
+   }
+  },
+  "apc_0_2": {
+   "frame": {
+    "x": 128,
+    "y": 0,
+    "w": 64,
+    "h": 36
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 64,
+    "h": 36
+   },
+   "sourceSize": {
+    "w": 64,
+    "h": 36
+   }
+  },
+  "apc_1_0": {
+   "frame": {
+    "x": 192,
+    "y": 0,
+    "w": 64,
+    "h": 36
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 64,
+    "h": 36
+   },
+   "sourceSize": {
+    "w": 64,
+    "h": 36
+   }
+  },
+  "apc_1_1": {
+   "frame": {
+    "x": 256,
+    "y": 0,
+    "w": 64,
+    "h": 36
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 64,
+    "h": 36
+   },
+   "sourceSize": {
+    "w": 64,
+    "h": 36
+   }
+  },
+  "apc_1_2": {
+   "frame": {
+    "x": 320,
+    "y": 0,
+    "w": 64,
+    "h": 36
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 64,
+    "h": 36
+   },
+   "sourceSize": {
+    "w": 64,
+    "h": 36
+   }
+  }
+ },
+ "meta": {
+  "app": "iron-raid export-reference",
+  "image": "apc.png",
+  "size": {
+   "w": 384,
+   "h": 36
+  },
+  "scale": "1",
+  "origin": [
+   0.5,
+   1
+  ]
+ }
+}

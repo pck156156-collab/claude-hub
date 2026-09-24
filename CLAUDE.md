@@ -31,5 +31,6 @@
 
 - `games/iron-raid/` — 메탈슬러그 레퍼런스 런앤건, 스테이지 1 데모. 그래픽·사운드 모두 코드로 생성(`src/art/`, `src/sfx.js`).
   - 스테이지 배치: `src/level.js`
-  - 자동 플레이 테스트: `node games/iron-raid/playtest.mjs <출력폴더> [--god] [--warp 3050] [--seconds 200]`
+  - 외부 에셋 규격: `games/iron-raid/docs/ASSET_SPEC.md`, 교체는 `content/manifest.json`
+  - 자동 플레이 테스트: `node games/iron-raid/tools/playtest.mjs <출력폴더> [--god] [--warp 3050] [--seconds 200]`
   - 게시용 빌드: `npm run build:iron-raid` → `dist/iron-raid/iron-raid.html` + `assets/*.js`를 Artifact로 게시

@@ -1,0 +1,57 @@
+{
+ "frames": {
+  "0": {
+   "frame": {
+    "x": 0,
+    "y": 0,
+    "w": 18,
+    "h": 17
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 18,
+    "h": 17
+   },
+   "sourceSize": {
+    "w": 18,
+    "h": 17
+   }
+  },
+  "1": {
+   "frame": {
+    "x": 18,
+    "y": 0,
+    "w": 18,
+    "h": 17
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 18,
+    "h": 17
+   },
+   "sourceSize": {
+    "w": 18,
+    "h": 17
+   }
+  }
+ },
+ "meta": {
+  "app": "iron-raid export-reference",
+  "image": "item_B.png",
+  "size": {
+   "w": 36,
+   "h": 17
+  },
+  "scale": "1",
+  "origin": [
+   0.5,
+   0.5
+  ]
+ }
+}

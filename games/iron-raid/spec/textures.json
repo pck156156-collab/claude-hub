@@ -1,0 +1,707 @@
+{
+ "sky": {
+  "width": 384,
+  "height": 216,
+  "origin": [
+   0,
+   0
+  ]
+ },
+ "far": {
+  "width": 512,
+  "height": 80,
+  "origin": [
+   0,
+   0
+  ]
+ },
+ "mid": {
+  "width": 512,
+  "height": 110,
+  "origin": [
+   0,
+   0
+  ]
+ },
+ "ground": {
+  "width": 64,
+  "height": 20,
+  "origin": [
+   0,
+   0
+  ]
+ },
+ "dock": {
+  "width": 32,
+  "height": 20,
+  "origin": [
+   0,
+   0
+  ]
+ },
+ "water_0": {
+  "width": 64,
+  "height": 24,
+  "origin": [
+   0,
+   0
+  ]
+ },
+ "water_1": {
+  "width": 64,
+  "height": 24,
+  "origin": [
+   0,
+   0
+  ]
+ },
+ "hut": {
+  "width": 72,
+  "height": 72,
+  "origin": [
+   0.5,
+   1
+  ]
+ },
+ "palm": {
+  "width": 48,
+  "height": 90,
+  "origin": [
+   0.5,
+   1
+  ]
+ },
+ "sandbags": {
+  "width": 40,
+  "height": 14,
+  "origin": [
+   0.5,
+   1
+  ]
+ },
+ "crate": {
+  "width": 16,
+  "height": 16,
+  "origin": [
+   0,
+   1
+  ]
+ },
+ "barrel": {
+  "width": 14,
+  "height": 18,
+  "origin": [
+   0.5,
+   1
+  ]
+ },
+ "campfire": {
+  "width": 20,
+  "height": 12,
+  "origin": [
+   0.5,
+   1
+  ]
+ },
+ "bullet": {
+  "width": 6,
+  "height": 3,
+  "origin": [
+   0.5,
+   0.5
+  ]
+ },
+ "ebullet": {
+  "width": 5,
+  "height": 5,
+  "origin": [
+   0.5,
+   0.5
+  ]
+ },
+ "shell": {
+  "width": 7,
+  "height": 7,
+  "origin": [
+   0.5,
+   0.5
+  ]
+ },
+ "bigshell": {
+  "width": 10,
+  "height": 6,
+  "origin": [
+   0.5,
+   0.5
+  ]
+ },
+ "grenade": {
+  "width": 6,
+  "height": 7,
+  "origin": [
+   0.5,
+   0.5
+  ]
+ },
+ "bomb": {
+  "width": 8,
+  "height": 12,
+  "origin": [
+   0.5,
+   0.5
+  ]
+ },
+ "rocket": {
+  "width": 12,
+  "height": 5,
+  "origin": [
+   0.5,
+   0.5
+  ]
+ },
+ "fireball": {
+  "width": 12,
+  "height": 8,
+  "origin": [
+   0.5,
+   0.5
+  ]
+ },
+ "sgblast": {
+  "frameWidth": 56,
+  "frameHeight": 28,
+  "origin": [
+   0.05,
+   0.5
+  ],
+  "frames": [
+   "sg_0",
+   "sg_1",
+   "sg_2",
+   "sg_3"
+  ]
+ },
+ "boom_s": {
+  "frameWidth": 32,
+  "frameHeight": 32,
+  "origin": [
+   0.5,
+   0.5
+  ],
+  "frames": [
+   "0",
+   "1",
+   "2",
+   "3",
+   "4",
+   "5",
+   "6",
+   "7"
+  ]
+ },
+ "boom_l": {
+  "frameWidth": 64,
+  "frameHeight": 64,
+  "origin": [
+   0.5,
+   0.5
+  ],
+  "frames": [
+   "0",
+   "1",
+   "2",
+   "3",
+   "4",
+   "5",
+   "6",
+   "7",
+   "8",
+   "9"
+  ]
+ },
+ "smoke": {
+  "frameWidth": 16,
+  "frameHeight": 16,
+  "origin": [
+   0.5,
+   0.5
+  ],
+  "frames": [
+   "0",
+   "1",
+   "2",
+   "3"
+  ]
+ },
+ "spark": {
+  "frameWidth": 11,
+  "frameHeight": 11,
+  "origin": [
+   0.5,
+   0.5
+  ],
+  "frames": [
+   "0",
+   "1",
+   "2"
+  ]
+ },
+ "splash": {
+  "frameWidth": 32,
+  "frameHeight": 32,
+  "origin": [
+   0.5,
+   1
+  ],
+  "frames": [
+   "0",
+   "1",
+   "2",
+   "3",
+   "4"
+  ]
+ },
+ "debris": {
+  "width": 4,
+  "height": 4,
+  "origin": [
+   0.5,
+   0.5
+  ]
+ },
+ "chip": {
+  "width": 4,
+  "height": 3,
+  "origin": [
+   0.5,
+   0.5
+  ]
+ },
+ "item_B": {
+  "frameWidth": 18,
+  "frameHeight": 17,
+  "origin": [
+   0.5,
+   0.5
+  ],
+  "frames": [
+   "0",
+   "1"
+  ]
+ },
+ "item_S": {
+  "frameWidth": 18,
+  "frameHeight": 17,
+  "origin": [
+   0.5,
+   0.5
+  ],
+  "frames": [
+   "0",
+   "1"
+  ]
+ },
+ "item_R": {
+  "frameWidth": 18,
+  "frameHeight": 17,
+  "origin": [
+   0.5,
+   0.5
+  ],
+  "frames": [
+   "0",
+   "1"
+  ]
+ },
+ "item_G": {
+  "frameWidth": 18,
+  "frameHeight": 17,
+  "origin": [
+   0.5,
+   0.5
+  ],
+  "frames": [
+   "0",
+   "1"
+  ]
+ },
+ "item_food": {
+  "width": 14,
+  "height": 10,
+  "origin": [
+   0.5,
+   0.5
+  ]
+ },
+ "item_gem": {
+  "width": 10,
+  "height": 10,
+  "origin": [
+   0.5,
+   0.5
+  ]
+ },
+ "arrow_in": {
+  "width": 14,
+  "height": 16,
+  "origin": [
+   0.5,
+   0.5
+  ]
+ },
+ "player": {
+  "frameWidth": 40,
+  "frameHeight": 44,
+  "origin": [
+   0.5,
+   1
+  ],
+  "frames": [
+   "p_stand_fwd_0",
+   "p_crouch_fwd_0",
+   "p_run_fwd_0_0",
+   "p_run_fwd_0_1",
+   "p_run_fwd_0_2",
+   "p_run_fwd_0_3",
+   "p_run_fwd_0_4",
+   "p_run_fwd_0_5",
+   "p_run_fwd_0_6",
+   "p_run_fwd_0_7",
+   "p_stand_fwd_1",
+   "p_crouch_fwd_1",
+   "p_run_fwd_1_0",
+   "p_run_fwd_1_1",
+   "p_run_fwd_1_2",
+   "p_run_fwd_1_3",
+   "p_run_fwd_1_4",
+   "p_run_fwd_1_5",
+   "p_run_fwd_1_6",
+   "p_run_fwd_1_7",
+   "p_stand_up_0",
+   "p_crouch_up_0",
+   "p_run_up_0_0",
+   "p_run_up_0_1",
+   "p_run_up_0_2",
+   "p_run_up_0_3",
+   "p_run_up_0_4",
+   "p_run_up_0_5",
+   "p_run_up_0_6",
+   "p_run_up_0_7",
+   "p_stand_up_1",
+   "p_crouch_up_1",
+   "p_run_up_1_0",
+   "p_run_up_1_1",
+   "p_run_up_1_2",
+   "p_run_up_1_3",
+   "p_run_up_1_4",
+   "p_run_up_1_5",
+   "p_run_up_1_6",
+   "p_run_up_1_7",
+   "p_jump_fwd_0",
+   "p_jump_fwd_1",
+   "p_jump_up_0",
+   "p_jump_up_1",
+   "p_jump_down_0",
+   "p_jump_down_1",
+   "p_idle_0",
+   "p_idle_1",
+   "r_stand_fwd_0",
+   "r_crouch_fwd_0",
+   "r_run_fwd_0_0",
+   "r_run_fwd_0_1",
+   "r_run_fwd_0_2",
+   "r_run_fwd_0_3",
+   "r_run_fwd_0_4",
+   "r_run_fwd_0_5",
+   "r_run_fwd_0_6",
+   "r_run_fwd_0_7",
+   "r_stand_fwd_1",
+   "r_crouch_fwd_1",
+   "r_run_fwd_1_0",
+   "r_run_fwd_1_1",
+   "r_run_fwd_1_2",
+   "r_run_fwd_1_3",
+   "r_run_fwd_1_4",
+   "r_run_fwd_1_5",
+   "r_run_fwd_1_6",
+   "r_run_fwd_1_7",
+   "r_stand_up_0",
+   "r_crouch_up_0",
+   "r_run_up_0_0",
+   "r_run_up_0_1",
+   "r_run_up_0_2",
+   "r_run_up_0_3",
+   "r_run_up_0_4",
+   "r_run_up_0_5",
+   "r_run_up_0_6",
+   "r_run_up_0_7",
+   "r_stand_up_1",
+   "r_crouch_up_1",
+   "r_run_up_1_0",
+   "r_run_up_1_1",
+   "r_run_up_1_2",
+   "r_run_up_1_3",
+   "r_run_up_1_4",
+   "r_run_up_1_5",
+   "r_run_up_1_6",
+   "r_run_up_1_7",
+   "r_jump_fwd_0",
+   "r_jump_fwd_1",
+   "r_jump_up_0",
+   "r_jump_up_1",
+   "r_jump_down_0",
+   "r_jump_down_1",
+   "r_idle_0",
+   "r_idle_1",
+   "b_stand_fwd_0",
+   "b_crouch_fwd_0",
+   "b_run_fwd_0_0",
+   "b_run_fwd_0_1",
+   "b_run_fwd_0_2",
+   "b_run_fwd_0_3",
+   "b_run_fwd_0_4",
+   "b_run_fwd_0_5",
+   "b_run_fwd_0_6",
+   "b_run_fwd_0_7",
+   "b_stand_fwd_1",
+   "b_crouch_fwd_1",
+   "b_run_fwd_1_0",
+   "b_run_fwd_1_1",
+   "b_run_fwd_1_2",
+   "b_run_fwd_1_3",
+   "b_run_fwd_1_4",
+   "b_run_fwd_1_5",
+   "b_run_fwd_1_6",
+   "b_run_fwd_1_7",
+   "b_stand_up_0",
+   "b_crouch_up_0",
+   "b_run_up_0_0",
+   "b_run_up_0_1",
+   "b_run_up_0_2",
+   "b_run_up_0_3",
+   "b_run_up_0_4",
+   "b_run_up_0_5",
+   "b_run_up_0_6",
+   "b_run_up_0_7",
+   "b_stand_up_1",
+   "b_crouch_up_1",
+   "b_run_up_1_0",
+   "b_run_up_1_1",
+   "b_run_up_1_2",
+   "b_run_up_1_3",
+   "b_run_up_1_4",
+   "b_run_up_1_5",
+   "b_run_up_1_6",
+   "b_run_up_1_7",
+   "b_jump_fwd_0",
+   "b_jump_fwd_1",
+   "b_jump_up_0",
+   "b_jump_up_1",
+   "b_jump_down_0",
+   "b_jump_down_1",
+   "b_idle_0",
+   "b_idle_1",
+   "throw_stand_0",
+   "throw_stand_1",
+   "throw_stand_2",
+   "knife_stand_0",
+   "knife_stand_1",
+   "throw_crouch_0",
+   "throw_crouch_1",
+   "throw_crouch_2",
+   "knife_crouch_0",
+   "knife_crouch_1",
+   "throw_jump_0",
+   "throw_jump_1",
+   "throw_jump_2",
+   "knife_jump_0",
+   "knife_jump_1",
+   "die_0",
+   "die_1",
+   "die_2",
+   "die_3",
+   "die_4",
+   "die_5",
+   "win_0",
+   "win_1"
+  ]
+ },
+ "soldier": {
+  "frameWidth": 40,
+  "frameHeight": 44,
+  "origin": [
+   0.5,
+   1
+  ],
+  "frames": [
+   "chat_0",
+   "chat_1",
+   "alert_0",
+   "walk_0",
+   "flee_0",
+   "kwalk_0",
+   "walk_1",
+   "flee_1",
+   "kwalk_1",
+   "walk_2",
+   "flee_2",
+   "kwalk_2",
+   "walk_3",
+   "flee_3",
+   "kwalk_3",
+   "walk_4",
+   "flee_4",
+   "kwalk_4",
+   "walk_5",
+   "flee_5",
+   "kwalk_5",
+   "walk_6",
+   "flee_6",
+   "kwalk_6",
+   "walk_7",
+   "flee_7",
+   "kwalk_7",
+   "shoot_0",
+   "cshoot_0",
+   "shoot_1",
+   "cshoot_1",
+   "throw_0",
+   "throw_1",
+   "throw_2",
+   "knife_0",
+   "knife_1",
+   "hurt_0",
+   "die_0",
+   "die_1",
+   "die_2",
+   "die_3",
+   "die_4",
+   "die_5"
+  ]
+ },
+ "pow": {
+  "frameWidth": 40,
+  "frameHeight": 44,
+  "origin": [
+   0.5,
+   1
+  ],
+  "frames": [
+   "tied_0",
+   "tied_1",
+   "free_0",
+   "run_0",
+   "run_1",
+   "run_2",
+   "run_3",
+   "run_4",
+   "run_5",
+   "run_6",
+   "run_7",
+   "give_0",
+   "salute_0"
+  ]
+ },
+ "tank": {
+  "frameWidth": 56,
+  "frameHeight": 40,
+  "origin": [
+   0.5,
+   1
+  ],
+  "frames": [
+   "tank_0_0",
+   "tank_0_1",
+   "tank_1_0",
+   "tank_1_1",
+   "tank_2_0",
+   "tank_2_1"
+  ]
+ },
+ "vulcan": {
+  "width": 16,
+  "height": 6,
+  "origin": [
+   0.1,
+   0.5
+  ]
+ },
+ "apc": {
+  "frameWidth": 64,
+  "frameHeight": 36,
+  "origin": [
+   0.5,
+   1
+  ],
+  "frames": [
+   "apc_0_0",
+   "apc_0_1",
+   "apc_0_2",
+   "apc_1_0",
+   "apc_1_1",
+   "apc_1_2"
+  ]
+ },
+ "heli": {
+  "frameWidth": 72,
+  "frameHeight": 36,
+  "origin": [
+   0.5,
+   0.5
+  ],
+  "frames": [
+   "heli_0",
+   "heli_1",
+   "heli_2"
+  ]
+ },
+ "boss_hull": {
+  "width": 176,
+  "height": 96,
+  "origin": [
+   0,
+   0
+  ]
+ },
+ "boss_armor": {
+  "width": 44,
+  "height": 32,
+  "origin": [
+   0,
+   0
+  ]
+ },
+ "boss_core": {
+  "frameWidth": 40,
+  "frameHeight": 28,
+  "origin": [
+   0,
+   0
+  ],
+  "frames": [
+   "core_0",
+   "core_1"
+  ]
+ },
+ "boss_cannon": {
+  "width": 40,
+  "height": 20,
+  "origin": [
+   0.7,
+   0.6
+  ]
+ },
+ "boss_door": {
+  "frameWidth": 16,
+  "frameHeight": 20,
+  "origin": [
+   0,
+   0
+  ],
+  "frames": [
+   "door_0",
+   "door_1",
+   "door_2"
+  ]
+ }
+}

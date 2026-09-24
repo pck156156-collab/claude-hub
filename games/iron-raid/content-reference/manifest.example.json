@@ -1,0 +1,169 @@
+{
+  "version": 1,
+  "sprites": {
+    "sky": {
+      "image": "sprites/sky.png"
+    },
+    "far": {
+      "image": "sprites/far.png"
+    },
+    "mid": {
+      "image": "sprites/mid.png"
+    },
+    "ground": {
+      "image": "sprites/ground.png"
+    },
+    "dock": {
+      "image": "sprites/dock.png"
+    },
+    "water_0": {
+      "image": "sprites/water_0.png"
+    },
+    "water_1": {
+      "image": "sprites/water_1.png"
+    },
+    "hut": {
+      "image": "sprites/hut.png"
+    },
+    "palm": {
+      "image": "sprites/palm.png"
+    },
+    "sandbags": {
+      "image": "sprites/sandbags.png"
+    },
+    "crate": {
+      "image": "sprites/crate.png"
+    },
+    "barrel": {
+      "image": "sprites/barrel.png"
+    },
+    "campfire": {
+      "image": "sprites/campfire.png"
+    },
+    "bullet": {
+      "image": "sprites/bullet.png"
+    },
+    "ebullet": {
+      "image": "sprites/ebullet.png"
+    },
+    "shell": {
+      "image": "sprites/shell.png"
+    },
+    "bigshell": {
+      "image": "sprites/bigshell.png"
+    },
+    "grenade": {
+      "image": "sprites/grenade.png"
+    },
+    "bomb": {
+      "image": "sprites/bomb.png"
+    },
+    "rocket": {
+      "image": "sprites/rocket.png"
+    },
+    "fireball": {
+      "image": "sprites/fireball.png"
+    },
+    "sgblast": {
+      "image": "sprites/sgblast.png",
+      "atlas": "sprites/sgblast.json"
+    },
+    "boom_s": {
+      "image": "sprites/boom_s.png",
+      "atlas": "sprites/boom_s.json"
+    },
+    "boom_l": {
+      "image": "sprites/boom_l.png",
+      "atlas": "sprites/boom_l.json"
+    },
+    "smoke": {
+      "image": "sprites/smoke.png",
+      "atlas": "sprites/smoke.json"
+    },
+    "spark": {
+      "image": "sprites/spark.png",
+      "atlas": "sprites/spark.json"
+    },
+    "splash": {
+      "image": "sprites/splash.png",
+      "atlas": "sprites/splash.json"
+    },
+    "debris": {
+      "image": "sprites/debris.png"
+    },
+    "chip": {
+      "image": "sprites/chip.png"
+    },
+    "item_B": {
+      "image": "sprites/item_B.png",
+      "atlas": "sprites/item_B.json"
+    },
+    "item_S": {
+      "image": "sprites/item_S.png",
+      "atlas": "sprites/item_S.json"
+    },
+    "item_R": {
+      "image": "sprites/item_R.png",
+      "atlas": "sprites/item_R.json"
+    },
+    "item_G": {
+      "image": "sprites/item_G.png",
+      "atlas": "sprites/item_G.json"
+    },
+    "item_food": {
+      "image": "sprites/item_food.png"
+    },
+    "item_gem": {
+      "image": "sprites/item_gem.png"
+    },
+    "arrow_in": {
+      "image": "sprites/arrow_in.png"
+    },
+    "player": {
+      "image": "sprites/player.png",
+      "atlas": "sprites/player.json"
+    },
+    "soldier": {
+      "image": "sprites/soldier.png",
+      "atlas": "sprites/soldier.json"
+    },
+    "pow": {
+      "image": "sprites/pow.png",
+      "atlas": "sprites/pow.json"
+    },
+    "tank": {
+      "image": "sprites/tank.png",
+      "atlas": "sprites/tank.json"
+    },
+    "vulcan": {
+      "image": "sprites/vulcan.png"
+    },
+    "apc": {
+      "image": "sprites/apc.png",
+      "atlas": "sprites/apc.json"
+    },
+    "heli": {
+      "image": "sprites/heli.png",
+      "atlas": "sprites/heli.json"
+    },
+    "boss_hull": {
+      "image": "sprites/boss_hull.png"
+    },
+    "boss_armor": {
+      "image": "sprites/boss_armor.png"
+    },
+    "boss_core": {
+      "image": "sprites/boss_core.png",
+      "atlas": "sprites/boss_core.json"
+    },
+    "boss_cannon": {
+      "image": "sprites/boss_cannon.png"
+    },
+    "boss_door": {
+      "image": "sprites/boss_door.png",
+      "atlas": "sprites/boss_door.json"
+    }
+  },
+  "sfx": {},
+  "bgm": {}
+}

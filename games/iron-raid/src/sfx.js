@@ -4,6 +4,9 @@ let master = null;
 let noiseBuf = null;
 let muted = false;
 let bgmTimer = null;
+let sampleBus = null;
+let bgmSource = null;
+const samples = {}; // name -> AudioBuffer loaded from content/ (overrides the synth sound)
 
 function ensure() {
   if (ac) return ac;
@@ -13,6 +16,9 @@ function ensure() {
   master = ac.createGain();
   master.gain.value = 0.35;
   master.connect(ac.destination);
+  sampleBus = ac.createGain();
+  sampleBus.gain.value = 0.9;
+  sampleBus.connect(ac.destination);
   noiseBuf = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
   const d = noiseBuf.getChannelData(0);
   for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
@@ -27,6 +33,7 @@ export function unlockAudio() {
 export function toggleMute() {
   muted = !muted;
   if (master) master.gain.value = muted ? 0 : 0.35;
+  if (sampleBus) sampleBus.gain.value = muted ? 0 : 0.9;
   return muted;
 }
 
@@ -63,7 +70,7 @@ function noise({ dur = 0.2, vol = 0.4, f0 = 3000, f1 = 300, q = 0.7, at = 0 }) {
   s.stop(t + dur + 0.02);
 }
 
-export const sfx = {
+const synth = {
   pistol: () => { tone({ f0: 900, f1: 180, dur: 0.07, vol: 0.18 }); noise({ dur: 0.05, vol: 0.2, f0: 5000, f1: 1000 }); },
   rifle: () => { tone({ f0: 700, f1: 120, dur: 0.06, vol: 0.14 }); noise({ dur: 0.06, vol: 0.25, f0: 4000, f1: 600 }); },
   shotgun: () => { noise({ dur: 0.3, vol: 0.6, f0: 2500, f1: 120 }); tone({ type: 'sawtooth', f0: 180, f1: 50, dur: 0.2, vol: 0.2 }); },
@@ -87,6 +94,33 @@ export const sfx = {
   start: () => { [523, 659, 784, 1046].forEach((f, i) => tone({ f0: f, dur: 0.14, vol: 0.2, at: i * 0.12 })); },
 };
 
+export const SFX_NAMES = Object.keys(synth);
+export const BGM_NAMES = ['stage', 'boss'];
+
+// Load an audio file for a sound name ('pistol', ... or 'bgm_stage', 'bgm_boss').
+export async function loadSample(name, url) {
+  if (!ensure()) return false;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${res.status} ${url}`);
+  samples[name] = await ac.decodeAudioData(await res.arrayBuffer());
+  return true;
+}
+
+function playSample(buf, loop = false) {
+  if (!ensure()) return null;
+  const src = ac.createBufferSource();
+  src.buffer = buf;
+  src.loop = loop;
+  src.connect(sampleBus);
+  src.start();
+  return src;
+}
+
+// Each sound plays its loaded file when there is one, otherwise the synth version.
+export const sfx = Object.fromEntries(SFX_NAMES.map((k) => [k, () => {
+  if (samples[k]) { if (!muted) playSample(samples[k]); } else synth[k]();
+}]));
+
 // ---- BGM: 16-step patterns. Notes are MIDI numbers, 0 = rest.
 const PATTERNS = {
   stage: {
@@ -109,6 +143,10 @@ const midi = (n) => 440 * 2 ** ((n - 69) / 12);
 export function playBgm(name) {
   stopBgm();
   if (!ensure()) return;
+  if (samples[`bgm_${name}`]) {
+    bgmSource = playSample(samples[`bgm_${name}`], true);
+    return;
+  }
   const p = PATTERNS[name];
   const step = 60 / p.bpm / 4;
   let i = 0;
@@ -133,4 +171,6 @@ export function playBgm(name) {
 export function stopBgm() {
   if (bgmTimer) clearInterval(bgmTimer);
   bgmTimer = null;
+  if (bgmSource) { try { bgmSource.stop(); } catch { /* already stopped */ } }
+  bgmSource = null;
 }

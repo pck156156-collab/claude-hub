@@ -1,0 +1,57 @@
+{
+ "frames": {
+  "core_0": {
+   "frame": {
+    "x": 0,
+    "y": 0,
+    "w": 40,
+    "h": 28
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 40,
+    "h": 28
+   },
+   "sourceSize": {
+    "w": 40,
+    "h": 28
+   }
+  },
+  "core_1": {
+   "frame": {
+    "x": 40,
+    "y": 0,
+    "w": 40,
+    "h": 28
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 40,
+    "h": 28
+   },
+   "sourceSize": {
+    "w": 40,
+    "h": 28
+   }
+  }
+ },
+ "meta": {
+  "app": "iron-raid export-reference",
+  "image": "boss_core.png",
+  "size": {
+   "w": 80,
+   "h": 28
+  },
+  "scale": "1",
+  "origin": [
+   0,
+   0
+  ]
+ }
+}
