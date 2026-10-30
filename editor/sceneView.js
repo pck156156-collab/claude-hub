@@ -1,4 +1,5 @@
 import { instantiate } from './project.js';
+import { Renderer, drawShape } from '../engine/Renderer.js';
 
 const HANDLE = 8;
 
@@ -7,6 +8,7 @@ export class SceneView {
   constructor(canvas, editor) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
+    this.r = new Renderer(canvas, { pixelArt: false });
     this.editor = editor;
     this.cam = { x: -32, y: -32, zoom: 2 };
     this.drag = null;
@@ -14,12 +16,15 @@ export class SceneView {
     this.spaceDown = false;
 
     new ResizeObserver(() => this.resize()).observe(canvas.parentElement);
-    canvas.addEventListener('mousedown', (e) => this.onDown(e));
-    window.addEventListener('mousemove', (e) => this.onMove(e));
-    window.addEventListener('mouseup', (e) => this.onUp(e));
+    // 포인터 이벤트로 마우스와 터치(태블릿)를 함께 처리한다.
+    canvas.style.touchAction = 'none';
+    canvas.addEventListener('pointerdown', (e) => this.onDown(e));
+    window.addEventListener('pointermove', (e) => this.onMove(e));
+    window.addEventListener('pointerup', (e) => this.onUp(e));
+    window.addEventListener('pointercancel', (e) => this.onUp(e));
     canvas.addEventListener('wheel', (e) => this.onWheel(e), { passive: false });
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-    canvas.addEventListener('mouseleave', () => { this.hoverCell = null; this.draw(); });
+    canvas.addEventListener('pointerleave', () => { this.hoverCell = null; this.draw(); });
     window.addEventListener('keydown', (e) => { if (e.code === 'Space' && !isTyping()) this.spaceDown = true; });
     window.addEventListener('keyup', (e) => { if (e.code === 'Space') this.spaceDown = false; });
   }
@@ -92,6 +97,8 @@ export class SceneView {
     const hit = this.entityAt(p);
     this.editor.select(hit);
     if (hit) this.drag = { mode: 'move', target: hit, ox: p.x - hit.x, oy: p.y - hit.y, changed: false };
+    // 빈 곳을 끌면 화면을 움직인다 (터치에서 특히 편하다).
+    else this.drag = { mode: 'pan', sx: e.clientX, sy: e.clientY, cx: this.cam.x, cy: this.cam.y };
   }
 
   onMove(e) {
@@ -147,6 +154,7 @@ export class SceneView {
     const g = this.grid;
     const exists = this.scene.entities.some((d) => d.prefab === key && Math.floor(d.x / g) === cx && Math.floor((d.y + d.h - 1) / g) === cy);
     if (exists) return;
+    if (key === 'player') this.editor.removePlayers();
     this.scene.entities.push(instantiate(key, cx, cy, g));
     this.drag.changed = true;
     this.draw();
@@ -163,10 +171,16 @@ export class SceneView {
 
   onWheel(e) {
     e.preventDefault();
-    const before = this.toWorld(e);
-    const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+    this.zoomAt(e.deltaY < 0 ? 1.15 : 1 / 1.15, e.clientX, e.clientY);
+  }
+
+  // 화면 좌표(clientX, clientY)를 기준으로 확대/축소. 좌표가 없으면 화면 가운데 기준.
+  zoomAt(factor, clientX, clientY) {
+    const rect = this.canvas.getBoundingClientRect();
+    const at = { clientX: clientX ?? rect.left + rect.width / 2, clientY: clientY ?? rect.top + rect.height / 2 };
+    const before = this.toWorld(at);
     this.cam.zoom = Math.min(16, Math.max(0.25, this.cam.zoom * factor));
-    const after = this.toWorld(e);
+    const after = this.toWorld(at);
     this.cam.x += before.x - after.x;
     this.cam.y += before.y - after.y;
     this.draw();
@@ -216,15 +230,10 @@ export class SceneView {
 
     for (const d of this.sortedEntities()) {
       ctx.globalAlpha = d.visible === false ? 0.35 : 1;
-      ctx.fillStyle = d.color || '#fff';
-      if (d.shape === 'circle') {
-        ctx.beginPath();
-        ctx.arc(d.x + d.w / 2, d.y + d.h / 2, Math.min(d.w, d.h) / 2, 0, Math.PI * 2);
-        ctx.fill();
-      } else {
-        ctx.fillRect(d.x, d.y, d.w, d.h);
-      }
-      if (d.components?.Script) {
+      drawShape(this.r, d.x, d.y, d.w, d.h, d);
+      if (d.components?.Script && !this.editor.easy) {
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'alphabetic';
         ctx.fillStyle = '#ffffffaa';
         ctx.font = `${8}px monospace`;
         ctx.fillText('{}', d.x + 1, d.y + 8);
@@ -254,10 +263,10 @@ export class SceneView {
     const sel = this.editor.selected;
     if (sel && scene.entities.includes(sel)) {
       ctx.lineWidth = 2 / cam.zoom;
-      ctx.strokeStyle = '#4da3ff';
+      ctx.strokeStyle = '#ff3d7f';
       ctx.strokeRect(sel.x, sel.y, sel.w, sel.h);
       const hs = HANDLE / cam.zoom;
-      ctx.fillStyle = '#4da3ff';
+      ctx.fillStyle = '#ff3d7f';
       ctx.fillRect(sel.x + sel.w - hs / 2, sel.y + sel.h - hs / 2, hs, hs);
     }
   }

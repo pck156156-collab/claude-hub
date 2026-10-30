@@ -2,7 +2,7 @@
 // 엔진 파일은 의존 순서대로 나열해야 한다(import 문을 제거하고 이어 붙이기 때문).
 export const ENGINE_FILES = [
   'Vec2.js', 'Entity.js', 'Physics.js', 'Camera.js', 'Renderer.js', 'Input.js',
-  'Assets.js', 'Synth.js', 'Scene.js', 'Tilemap.js', 'Engine.js', 'behaviors.js', 'GameRuntime.js',
+  'Assets.js', 'Synth.js', 'Scene.js', 'Tilemap.js', 'Engine.js', 'TouchControls.js', 'behaviors.js', 'GameRuntime.js',
 ];
 
 export function stripModule(src) {
@@ -30,8 +30,8 @@ export function buildGameHtml(project, engineCode) {
 <title>${escapeHtml(project.name)}</title>
 <style>
   html, body { margin: 0; height: 100%; background: #0b0b10; }
-  body { display: flex; align-items: center; justify-content: center; }
-  canvas { width: min(100vw, calc(100vh * ${width} / ${height})); aspect-ratio: ${width} / ${height}; image-rendering: pixelated; }
+  body { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; }
+  canvas { width: min(100vw, calc((100vh - 90px) * ${width} / ${height})); aspect-ratio: ${width} / ${height}; image-rendering: pixelated; }
 </style>
 </head>
 <body>
@@ -42,6 +42,7 @@ ${engineCode.replace(/<\/script/gi, '<\\/script')}
 const project = ${json};
 const engine = new Engine(document.getElementById('game'), { width: ${width}, height: ${height} });
 engine.start(new GameScene(project, ${start}));
+if (matchMedia('(pointer: coarse)').matches) new TouchControls(engine.input, document.body);
 })();
 </script>
 </body>

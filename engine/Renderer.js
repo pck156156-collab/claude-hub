@@ -52,21 +52,49 @@ export class Renderer {
   }
 }
 
-// 단색 사각형/원으로 엔티티를 그리는 간단한 컴포넌트.
+// 사각형/원/가시 모양 또는 이모지 하나를 (x, y, w, h) 상자에 맞춰 그린다. 에디터와 게임이 함께 쓴다.
+export function drawShape(r, x, y, w, h, { color = '#fff', shape = 'rect', emoji = '' } = {}) {
+  const ctx = r.ctx;
+  if (emoji) {
+    const size = Math.min(w, h);
+    ctx.font = `${size}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#000';
+    ctx.fillText(emoji, x + w / 2, y + h / 2 + size * 0.08);
+    return;
+  }
+  ctx.fillStyle = color;
+  if (shape === 'circle') {
+    ctx.beginPath();
+    ctx.arc(x + w / 2, y + h / 2, Math.min(w, h) / 2, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (shape === 'spike') {
+    const n = Math.max(1, Math.round(w / Math.max(4, h)));
+    const sw = w / n;
+    ctx.beginPath();
+    for (let i = 0; i < n; i++) {
+      ctx.moveTo(x + i * sw, y + h);
+      ctx.lineTo(x + i * sw + sw / 2, y);
+      ctx.lineTo(x + (i + 1) * sw, y + h);
+    }
+    ctx.fill();
+  } else {
+    ctx.fillRect(x, y, w, h);
+  }
+}
+
+// 엔티티를 단색 도형이나 이모지로 그리는 컴포넌트.
 export class Shape {
-  constructor({ color = '#fff', shape = 'rect' } = {}) {
+  constructor({ color = '#fff', shape = 'rect', emoji = '' } = {}) {
     this.entity = null;
     this.color = color;
     this.shape = shape;
+    this.emoji = emoji;
   }
 
   render(r) {
     const e = this.entity;
-    if (this.shape === 'circle') {
-      const c = e.center;
-      r.circle(c.x, c.y, Math.min(e.size.x, e.size.y) / 2, this.color);
-    } else {
-      r.rect(e.pos.x, e.pos.y, e.size.x, e.size.y, this.color);
-    }
+    drawShape(r, e.pos.x, e.pos.y, e.size.x, e.size.y, this);
   }
 }

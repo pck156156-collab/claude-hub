@@ -40,6 +40,17 @@ export class Input {
     this._listeners = [];
   }
 
+  // 화면 터치 버튼 등에서 키 입력을 흉내 낸다.
+  virtualDown(code) {
+    if (!this.down.has(code)) this.pressed.add(code);
+    this.down.add(code);
+  }
+
+  virtualUp(code) {
+    this.down.delete(code);
+    this.released.add(code);
+  }
+
   isDown(...codes) { return codes.some((c) => this.down.has(c)); }
   wasPressed(...codes) { return codes.some((c) => this.pressed.has(c)); }
   wasReleased(...codes) { return codes.some((c) => this.released.has(c)); }

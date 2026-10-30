@@ -9,7 +9,7 @@ export function buildEntity(data) {
   const e = new Entity({ x: data.x, y: data.y, w: data.w, h: data.h, tags: data.tags || [] });
   e.name = data.name || `Entity${e.id}`;
   e.z = data.z || 0;
-  if (data.visible !== false) e.add(new Shape({ color: data.color || '#ffffff', shape: data.shape || 'rect' }));
+  if (data.visible !== false) e.add(new Shape({ color: data.color || '#ffffff', shape: data.shape || 'rect', emoji: data.emoji || '' }));
   for (const [type, props] of Object.entries(data.components || {})) {
     const def = behaviors[type];
     if (!def) continue;
@@ -125,6 +125,13 @@ export class GameScene extends Scene {
       }
     }
 
+    for (const s of this.findByTag('spring')) {
+      if (p.body && p.body.vel.y > 0 && overlaps(p, s) && p.bottom - s.top < 12) {
+        p.body.vel.y = -(s.springPower ?? 750);
+        engine.synth.beep({ freq: 220, toFreq: 880, duration: 0.2, type: 'triangle' });
+      }
+    }
+
     if (p.top > this.bounds.y + this.bounds.h + 64) return this.die();
 
     const goal = this.findByTag('goal').find((g) => overlaps(p, g));
@@ -150,8 +157,9 @@ export class GameScene extends Scene {
   }
 
   renderUI(r) {
-    r.text(this.data.name, 8, 8, { size: 12 });
-    r.text(`★ ${this.score}`, 8, 24, { size: 12, color: '#ffd84a' });
+    r.rect(4, 4, Math.max(90, this.data.name.length * 8 + 12), 38, 'rgba(0,0,0,0.4)');
+    r.text(this.data.name, 10, 9, { size: 12 });
+    r.text(`★ ${this.score}`, 10, 25, { size: 12, color: '#ffd84a' });
     if (this.engine.paused) r.text('일시정지', r.width / 2, r.height / 2 - 8, { size: 16, align: 'center' });
     if (this.state === 'win') {
       r.rect(0, 0, r.width, r.height, 'rgba(0,0,0,0.6)');

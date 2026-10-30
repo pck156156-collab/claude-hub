@@ -1,5 +1,6 @@
 import { Component } from './Entity.js';
 import { Body, overlaps } from './Physics.js';
+import { Shape } from './Renderer.js';
 
 // 에디터에서 붙일 수 있는 컴포넌트 목록.
 // fields는 인스펙터 UI와 기본값을, create는 런타임 컴포넌트 생성을 정의한다.
@@ -39,6 +40,7 @@ export class PlayerController extends Component {
 
   render(r) {
     const e = this.entity;
+    if (e.get(Shape)?.emoji) return;
     const eyeX = this.facing > 0 ? e.right - 5 : e.left + 2;
     r.rect(eyeX, e.top + 4, 3, 3, '#14141c');
   }
@@ -149,6 +151,11 @@ export const behaviors = {
     label: '위험 요소',
     fields: [{ key: 'stompable', label: '밟아서 처치 가능', type: 'bool', default: false }],
     create: (p, e) => { e.tags.add('hazard'); if (p.stompable) e.tags.add('stompable'); },
+  },
+  Spring: {
+    label: '점프대',
+    fields: [{ key: 'power', label: '튕기는 힘', type: 'number', default: 750 }],
+    create: (p, e) => { e.tags.add('spring'); e.springPower = p.power; },
   },
   Goal: {
     label: '목표 지점',

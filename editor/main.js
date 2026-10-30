@@ -1,11 +1,14 @@
 import { Engine } from '../engine/Engine.js';
+import { TouchControls } from '../engine/TouchControls.js';
 import { GameScene } from '../engine/GameRuntime.js';
 import { prefabs, instantiate, createDefaultProject, createScene, History, newId } from './project.js';
 import { SceneView, isTyping } from './sceneView.js';
 import { Inspector, h } from './inspector.js';
 import { loadEngineSources, bundleEngine, buildGameHtml } from './exporter.js';
+import { renderEasyPanel } from './easyPanel.js';
 
 const STORAGE_KEY = 'hub-engine:project';
+const MODE_KEY = 'hub-engine:mode';
 const $ = (sel) => document.querySelector(sel);
 
 class Editor {
@@ -13,8 +16,10 @@ class Editor {
     this.project = this.loadAutosave() || createDefaultProject();
     this.sceneIndex = 0;
     this.selectedId = null;
-    this.tool = 'select';
+    this.easy = readMode() !== 'pro';
+    this.tool = this.easy ? 'paint' : 'select';
     this.brush = 'wall';
+    this.playedOnce = false;
     this.snap = true;
     this.showGrid = true;
     this.showViewport = true;
@@ -27,8 +32,52 @@ class Editor {
 
     this.bindToolbar();
     this.bindShortcuts();
+    document.body.classList.toggle('easy', this.easy);
     this.refreshAll();
     this.log('에디터 준비 완료. 왼쪽 프리팹을 골라 칠하기(B)로 레벨을 그리고 ▶ 실행(F5)으로 테스트하세요.', 'ok');
+  }
+
+  // 쉬운 모드(어린이용) ↔ 전문가 모드
+  setMode(easy) {
+    this.easy = easy;
+    document.body.classList.toggle('easy', easy);
+    try { localStorage.setItem(MODE_KEY, easy ? 'easy' : 'pro'); } catch { /* 무시 */ }
+    this.refreshAll();
+    requestAnimationFrame(() => this.sceneView.resize());
+  }
+
+  renderPanel() {
+    if (this.easy) renderEasyPanel($('#easy-panel'), this);
+    else this.inspector.render();
+  }
+
+  // 쉬운 모드 아래쪽 도우미: 무엇을 하면 되는지 단계별로 알려준다.
+  updateHelper(message, type = '') {
+    const ents = this.scene.entities;
+    const has = (c) => ents.some((d) => d.components?.[c]);
+    const steps = [
+      { text: '🧱 땅 그리기', done: ents.filter((d) => d.components?.Solid).length >= 3, hint: '왼쪽에서 "땅"을 고르고 화면에 쓱쓱 그려 보세요!' },
+      { text: '😊 주인공 놓기', done: has('PlayerController'), hint: '"주인공"을 골라 땅 위에 콕 놓아 보세요.' },
+      { text: '🚩 깃발 놓기', done: has('Goal'), hint: '"깃발"을 놓으면 거기가 도착 지점이에요.' },
+      { text: '⭐ 별·괴물 놓기', done: has('Collectible') || has('Hazard'), hint: '별이나 괴물, 가시를 놓아서 재미있게 만들어요.' },
+      { text: '▶ 놀아 보기', done: this.playedOnce, hint: '위쪽 초록색 "▶ 놀이하기" 버튼을 눌러 보세요!' },
+    ];
+    const current = steps.find((st) => !st.done);
+    $('#helper-steps').replaceChildren(...steps.map((st) => h('li', { class: st.done ? 'done' : st === current ? 'current' : '' }, (st.done ? '✅ ' : '') + st.text)));
+    const msg = $('#helper-message');
+    msg.className = `helper-message ${message ? type : current ? '' : 'ok'}`;
+    msg.textContent = message || (current ? current.hint : '🎉 멋진 게임이에요! 새 단계(＋)를 만들거나 "🎁 게임 파일 만들기"로 친구에게 보여 주세요.');
+  }
+
+  // 쉬운 모드에서는 도우미가, 전문가 모드에서는 콘솔이 알려준다.
+  say(message, type = '') {
+    if (this.easy) this.updateHelper(message, type);
+    this.log(message, type);
+  }
+
+  removePlayers() {
+    const s = this.scene;
+    s.entities = s.entities.filter((d) => !d.components?.PlayerController);
   }
 
   // ---- 상태 ----
@@ -38,7 +87,7 @@ class Editor {
   select(d) {
     this.selectedId = d ? d.id : null;
     this.refreshHierarchy();
-    this.inspector.render();
+    this.renderPanel();
     this.sceneView.draw();
   }
 
@@ -48,6 +97,8 @@ class Editor {
     this.history.push(snap);
     try { localStorage.setItem(STORAGE_KEY, snap); } catch { /* 저장 공간 없음: 무시 */ }
     this.refreshHierarchy();
+    this.refreshScenes();
+    this.updateHelper();
     this.sceneView.draw();
   }
 
@@ -77,7 +128,7 @@ class Editor {
     if (key === 'name' || key === 'color') this.refreshHierarchy();
   }
 
-  refreshInspectorValues() { this.inspector.refreshValues(); }
+  refreshInspectorValues() { if (!this.easy) this.inspector.refreshValues(); }
 
   // ---- 패널 ----
   refreshAll() {
@@ -86,7 +137,8 @@ class Editor {
     this.refreshPalette();
     this.refreshHierarchy();
     this.refreshTools();
-    this.inspector.render();
+    this.renderPanel();
+    this.updateHelper();
     this.sceneView.draw();
   }
 
@@ -109,12 +161,17 @@ class Editor {
   }
 
   refreshPalette() {
-    $('#palette').replaceChildren(...Object.entries(prefabs).map(([key, p]) => h('button', {
-      class: key === this.brush ? 'active' : '',
-      title: `${p.label} — 칠하기 브러시로 선택 (더블클릭: 화면 중앙에 배치)`,
-      onclick: () => { this.brush = key; this.setTool('paint'); this.refreshPalette(); },
+    const entries = Object.entries(prefabs).filter(([, p]) => !(this.easy && p.proOnly));
+    $('#palette').replaceChildren(...entries.map(([key, p]) => h('button', {
+      class: key === this.brush && this.tool === 'paint' ? 'active' : '',
+      title: this.easy ? p.tip : `${p.label} — 칠하기 브러시로 선택 (더블클릭: 화면 중앙에 배치)`,
+      onclick: () => { this.brush = key; this.setTool('paint'); },
       ondblclick: () => this.placeAtCenter(key),
-    }, h('span', { class: 'swatch', style: `background:${p.color};${p.shape === 'circle' ? 'border-radius:50%' : ''}` }), p.label)));
+    },
+    p.emoji
+      ? h('span', { class: 'emoji' }, p.emoji)
+      : h('span', { class: `swatch ${p.shape || ''}`, style: `background:${p.color};${p.shape === 'circle' ? 'border-radius:50%' : ''}` }),
+    p.label)));
   }
 
   refreshHierarchy() {
@@ -141,6 +198,7 @@ class Editor {
   setTool(tool) {
     this.tool = tool;
     this.refreshTools();
+    this.refreshPalette();
     this.sceneView.draw();
   }
 
@@ -162,6 +220,7 @@ class Editor {
     const cx = Math.floor((cam.x + c.width / 2 / cam.zoom) / g);
     const cy = Math.floor((cam.y + c.height / 2 / cam.zoom) / g);
     const d = instantiate(key, cx, cy, g);
+    if (key === 'player') this.removePlayers();
     this.scene.entities.push(d);
     this.setTool('select');
     this.commit();
@@ -174,12 +233,12 @@ class Editor {
     this.scene.entities.splice(i, 1);
     if (this.selectedId === d.id) this.selectedId = null;
     this.commit();
-    this.inspector.render();
+    this.renderPanel();
   }
 
   duplicateSelected() {
     const d = this.selected;
-    if (!d) return;
+    if (!d || d.components?.PlayerController) return;
     const copy = { ...structuredClone(d), id: newId(), x: d.x + this.project.settings.grid };
     this.scene.entities.push(copy);
     this.commit();
@@ -193,16 +252,15 @@ class Editor {
     this.refreshAll();
   }
 
-  uniqueSceneName(base) {
+  uniqueSceneName() {
     const names = new Set(this.project.scenes.map((s) => s.name));
     let n = this.project.scenes.length + 1;
-    let name = `${base} ${n}`;
-    while (names.has(name)) name = `${base} ${++n}`;
-    return name;
+    while (names.has(`${n}단계`)) n++;
+    return `${n}단계`;
   }
 
   addScene() {
-    const s = createScene(this.uniqueSceneName('Level'));
+    const s = createScene(this.uniqueSceneName());
     this.project.scenes.push(s);
     this.commit();
     this.switchScene(this.project.scenes.length - 1);
@@ -210,7 +268,7 @@ class Editor {
 
   duplicateScene(i) {
     const copy = structuredClone(this.project.scenes[i]);
-    copy.name = this.uniqueSceneName(copy.name.replace(/\s*\d+$/, '') || 'Level');
+    copy.name = this.uniqueSceneName();
     copy.entities.forEach((d) => { d.id = newId(); });
     this.project.scenes.splice(i + 1, 0, copy);
     this.commit();
@@ -218,9 +276,9 @@ class Editor {
   }
 
   deleteScene(i) {
-    if (this.project.scenes.length === 1) return this.log('씬은 최소 한 개 있어야 합니다.', 'error');
+    if (this.project.scenes.length === 1) return this.say('단계(씬)는 최소 한 개 있어야 해요.', 'error');
     const s = this.project.scenes[i];
-    if (!confirm(`"${s.name}" 씬을 삭제할까요? (실행 취소 가능)`)) return;
+    if (!confirm(`"${s.name}"을(를) 지울까요? (↩️ 되돌리기로 다시 살릴 수 있어요)`)) return;
     this.project.scenes.splice(i, 1);
     if (this.project.settings.startScene === s.name) this.project.settings.startScene = this.project.scenes[0].name;
     this.sceneIndex = Math.min(this.sceneIndex, this.project.scenes.length - 1);
@@ -240,18 +298,18 @@ class Editor {
 
   // ---- 파일 ----
   newProject() {
-    if (!confirm('새 프로젝트를 만들까요? 저장하지 않은 내용은 사라집니다. (현재 프로젝트는 "저장"으로 파일에 보관하세요)')) return;
+    if (!confirm('처음부터 새로 만들까요?\n지금 만든 게임은 사라져요. (먼저 "💾 저장"을 누르면 파일로 남길 수 있어요)')) return;
     this.project = createDefaultProject();
     this.sceneIndex = 0;
     this.selectedId = null;
     this.commit();
     this.refreshAll();
-    this.log('새 프로젝트를 만들었습니다.', 'ok');
+    this.say('새 게임을 시작했어요! 🎉', 'ok');
   }
 
   saveFile() {
     download(`${safeName(this.project.name)}.json`, JSON.stringify(this.project, null, 2), 'application/json');
-    this.log('프로젝트 파일을 저장했습니다.', 'ok');
+    this.say('💾 저장했어요! 다운로드 폴더에 파일이 생겼어요.', 'ok');
   }
 
   openFile() {
@@ -268,9 +326,9 @@ class Editor {
         this.selectedId = null;
         this.commit();
         this.refreshAll();
-        this.log(`"${file.name}" 을(를) 열었습니다.`, 'ok');
+        this.say(`📂 "${file.name}" 을(를) 불러왔어요.`, 'ok');
       } catch (err) {
-        this.log(`파일을 열 수 없습니다: ${err.message}`, 'error');
+        this.say(`이 파일은 열 수 없어요 😢 (${err.message})`, 'error');
       }
     };
     input.click();
@@ -280,9 +338,9 @@ class Editor {
     try {
       const code = bundleEngine(await loadEngineSources());
       download(`${safeName(this.project.name)}.html`, buildGameHtml(this.project, code), 'text/html');
-      this.log('게임을 HTML 파일 하나로 내보냈습니다. 더블클릭하면 브라우저에서 바로 실행됩니다.', 'ok');
+      this.say('🎁 게임 파일을 만들었어요! 다운로드된 파일을 더블클릭하면 바로 놀 수 있어요.', 'ok');
     } catch (err) {
-      this.log(`내보내기 실패: ${err.message}`, 'error');
+      this.say(`게임 파일을 만들지 못했어요 😢 (${err.message})`, 'error');
     }
   }
 
@@ -293,10 +351,14 @@ class Editor {
   }
 
   play() {
+    if (!this.scene.entities.some((d) => d.components?.PlayerController)) {
+      return this.say('😊 주인공이 없어요! 왼쪽에서 "주인공"을 골라 화면에 놓아 주세요.', 'error');
+    }
     document.activeElement?.blur();
     const { width, height } = this.project.settings;
     const overlay = $('#game-overlay');
     overlay.hidden = false;
+    document.body.classList.add('playing');
     const canvas = $('#game-canvas');
     const fit = () => {
       const r = overlay.getBoundingClientRect();
@@ -310,8 +372,11 @@ class Editor {
     const project = structuredClone(this.project);
     this.engine = new Engine(canvas, { width, height });
     this.engine.start(new GameScene(project, this.sceneIndex, { log: (m, t) => this.log(m, t) }));
+    if (this.easy || matchMedia('(pointer: coarse)').matches) this.touch = new TouchControls(this.engine.input, $('#touch-area'));
+    this.playedOnce = true;
     const btn = $('[data-action="play"]');
-    btn.textContent = '■ 정지';
+    this._playLabel = btn.innerHTML;
+    btn.innerHTML = '<span class="easy-only tb"><i>⏹️</i>그만하기</span><span class="pro-only">■ 정지</span>';
     btn.classList.add('running');
     this.log(`"${this.scene.name}" 실행`, 'ok');
   }
@@ -320,10 +385,14 @@ class Editor {
     if (!this.engine) return;
     this.engine.destroy();
     this.engine = null;
+    this.touch?.destroy();
+    this.touch = null;
+    this.updateHelper();
     window.removeEventListener('resize', this._fit);
     $('#game-overlay').hidden = true;
+    document.body.classList.remove('playing');
     const btn = $('[data-action="play"]');
-    btn.textContent = '▶ 실행';
+    btn.innerHTML = this._playLabel;
     btn.classList.remove('running');
     this.log('실행 정지');
   }
@@ -338,6 +407,10 @@ class Editor {
       undo: () => this.undo(),
       redo: () => this.redo(),
       play: () => this.togglePlay(),
+      stop: () => this.stop(),
+      mode: () => this.setMode(!this.easy),
+      'zoom-in': () => this.sceneView.zoomAt(1.25),
+      'zoom-out': () => this.sceneView.zoomAt(0.8),
       'add-scene': () => this.addScene(),
       'clear-console': () => $('#console').replaceChildren(),
     };
@@ -393,6 +466,10 @@ function download(filename, content, type) {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function readMode() {
+  try { return localStorage.getItem(MODE_KEY); } catch { return null; }
 }
 
 const safeName = (s) => (s || 'game').replace(/[\\/:*?"<>|]+/g, '_').trim() || 'game';

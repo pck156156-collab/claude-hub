@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { Body } from '../engine/Physics.js';
+import { Shape } from '../engine/Renderer.js';
 import { buildEntity, computeBounds } from '../engine/GameRuntime.js';
 import { createDefaultProject, instantiate, History } from '../editor/project.js';
 import { ENGINE_FILES, bundleEngine, buildGameHtml } from '../editor/exporter.js';
@@ -48,4 +49,13 @@ test('내보낸 게임 HTML의 스크립트가 문법적으로 올바르다', ()
   const html = buildGameHtml(createDefaultProject(), code);
   const script = html.match(/<script>([\s\S]*)<\/script>/)[1];
   assert.doesNotThrow(() => new Function(script));
+});
+
+test('쉬운 모드 프리팹: 이모지와 점프대', () => {
+  const player = buildEntity(instantiate('player', 0, 0, 16));
+  assert.equal(player.get(Shape).emoji, '😊');
+  const spring = buildEntity(instantiate('spring', 1, 1, 16));
+  assert.ok(spring.is('spring'));
+  assert.equal(spring.springPower, 750);
+  assert.ok(!spring.is('solid'), '점프대는 위에 올라섰을 때 튕겨야 하므로 고체가 아니다');
 });
