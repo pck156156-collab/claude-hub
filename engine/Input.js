@@ -6,26 +6,38 @@ export class Input {
     this.released = new Set();
     this.mouse = { x: 0, y: 0, down: false, pressed: false };
 
-    target.addEventListener('keydown', (e) => {
+    this._listeners = [];
+    const on = (el, type, fn) => {
+      el.addEventListener(type, fn);
+      this._listeners.push([el, type, fn]);
+    };
+
+    on(target, 'keydown', (e) => {
       if (!this.down.has(e.code)) this.pressed.add(e.code);
       this.down.add(e.code);
       if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
     });
-    target.addEventListener('keyup', (e) => {
+    on(target, 'keyup', (e) => {
       this.down.delete(e.code);
       this.released.add(e.code);
     });
-    target.addEventListener('blur', () => this.down.clear());
+    on(target, 'blur', () => this.down.clear());
 
     if (canvas) {
-      canvas.addEventListener('mousemove', (e) => {
+      on(canvas, 'mousemove', (e) => {
         const r = canvas.getBoundingClientRect();
         this.mouse.x = ((e.clientX - r.left) / r.width) * canvas.width;
         this.mouse.y = ((e.clientY - r.top) / r.height) * canvas.height;
       });
-      canvas.addEventListener('mousedown', () => { this.mouse.down = true; this.mouse.pressed = true; });
-      window.addEventListener('mouseup', () => { this.mouse.down = false; });
+      on(canvas, 'mousedown', () => { this.mouse.down = true; this.mouse.pressed = true; });
+      on(window, 'mouseup', () => { this.mouse.down = false; });
     }
+  }
+
+  // 등록한 이벤트 리스너를 모두 해제한다.
+  dispose() {
+    for (const [el, type, fn] of this._listeners) el.removeEventListener(type, fn);
+    this._listeners = [];
   }
 
   isDown(...codes) { return codes.some((c) => this.down.has(c)); }

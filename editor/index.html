@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Claude Hub Engine — 에디터</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <header class="toolbar">
+    <strong class="logo">◆ Hub Engine</strong>
+    <span id="project-title" class="project-title"></span>
+    <div class="group">
+      <button data-action="new" title="새 프로젝트">새로 만들기</button>
+      <button data-action="open" title="프로젝트 파일 열기 (Ctrl+O)">열기</button>
+      <button data-action="save" title="프로젝트 파일로 저장 (Ctrl+S)">저장</button>
+      <button data-action="export" title="실행 가능한 HTML 게임으로 내보내기">게임 내보내기</button>
+    </div>
+    <div class="group">
+      <button data-action="undo" title="실행 취소 (Ctrl+Z)">↶</button>
+      <button data-action="redo" title="다시 실행 (Ctrl+Y)">↷</button>
+    </div>
+    <div class="group tools">
+      <button data-tool="select" title="선택/이동 (V)">선택</button>
+      <button data-tool="paint" title="타일 칠하기 (B)">칠하기</button>
+      <button data-tool="erase" title="지우기 (E)">지우기</button>
+    </div>
+    <div class="group">
+      <label class="check"><input type="checkbox" id="opt-snap" checked /> 격자 맞춤</label>
+      <label class="check"><input type="checkbox" id="opt-grid" checked /> 격자</label>
+      <label class="check"><input type="checkbox" id="opt-viewport" checked /> 화면 영역</label>
+    </div>
+    <div class="spacer"></div>
+    <button class="play" data-action="play" title="실행 (F5)">▶ 실행</button>
+  </header>
+
+  <aside class="left">
+    <section class="panel">
+      <h2>씬 <button class="icon" data-action="add-scene" title="씬 추가">＋</button></h2>
+      <ul id="scene-list" class="list"></ul>
+    </section>
+    <section class="panel">
+      <h2>프리팹 <small>클릭: 브러시 선택</small></h2>
+      <div id="palette" class="palette"></div>
+    </section>
+    <section class="panel grow">
+      <h2>계층 구조 <small id="entity-count"></small></h2>
+      <ul id="hierarchy" class="list"></ul>
+    </section>
+  </aside>
+
+  <main class="viewport">
+    <canvas id="scene-canvas"></canvas>
+    <div id="game-overlay" class="game-overlay" hidden>
+      <div class="game-frame">
+        <canvas id="game-canvas"></canvas>
+        <p>실행 중 · 방향키/WASD 이동 · Space 점프 · R 재시작 · P 일시정지 · <b>Esc</b> 정지</p>
+      </div>
+    </div>
+  </main>
+
+  <aside class="right">
+    <section class="panel grow">
+      <h2>인스펙터</h2>
+      <div id="inspector"></div>
+    </section>
+  </aside>
+
+  <footer class="bottom">
+    <div class="console-head">
+      <span>콘솔</span>
+      <button class="icon" data-action="clear-console" title="콘솔 지우기">⌫</button>
+      <span id="status" class="status"></span>
+    </div>
+    <div id="console" class="console"></div>
+  </footer>
+
+  <input type="file" id="file-input" accept=".json,application/json" hidden />
+  <script type="module" src="./main.js"></script>
+</body>
+</html>

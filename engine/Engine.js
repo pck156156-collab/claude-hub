@@ -25,9 +25,10 @@ export class Engine {
     this._last = 0;
     this._frame = this._frame.bind(this);
 
-    document.addEventListener('visibilitychange', () => {
+    this._onVisibility = () => {
       if (!document.hidden) this._last = performance.now();
-    });
+    };
+    document.addEventListener('visibilitychange', this._onVisibility);
   }
 
   setScene(scene) {
@@ -45,6 +46,15 @@ export class Engine {
   }
 
   stop() { this.running = false; }
+
+  // 루프를 멈추고 입력/오디오 자원을 정리한다. 에디터에서 플레이를 여러 번 반복할 때 필요하다.
+  destroy() {
+    this.stop();
+    this.scene?.exit();
+    this.input.dispose();
+    this.synth.ctx?.close();
+    document.removeEventListener('visibilitychange', this._onVisibility);
+  }
 
   _frame(now) {
     if (!this.running) return;

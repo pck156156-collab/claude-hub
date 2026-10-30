@@ -9,3 +9,5 @@ export { Assets } from './Assets.js';
 export { Synth } from './Synth.js';
 export { Vec2 } from './Vec2.js';
 export { parseTilemap } from './Tilemap.js';
+export { behaviors, defaultProps, PlayerController, Patrol, Script } from './behaviors.js';
+export { GameScene, buildEntity, computeBounds } from './GameRuntime.js';
