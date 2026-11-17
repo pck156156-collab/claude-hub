@@ -57,10 +57,20 @@ export class Vehicle {
     this.lateralAccel = 0;
     this.onRoad = true;
     this.touchingWall = false;
+    this.wallNormalX = 0; // 마지막 벽 접촉 법선 (트랙 바깥 방향)
+    this.wallNormalZ = 0;
+    this.wallContactX = 0;
+    this.wallContactZ = 0;
+    this.wallAssist = false; // 이번 스텝에 벽 탈출 보조가 작동했는지 (디버그)
     this.lastImpactSpeed = 0;
     this.braking = false;
     this.handbrakeOn = false;
     this.throttleInput = 0; // 배기 효과 연동용
+    // 진단값 (디버그 패널): 앞/뒤 타이어 슬립각, 접지력 사용률(1 이상 = 한계 초과·미끄러짐)
+    this.frontSlipAngle = 0;
+    this.rearTireSlipAngle = 0;
+    this.frontGripUse = 0;
+    this.rearGripUse = 0;
     this.frontSpin = 0;
     this.rearSpin = 0;
 
@@ -115,7 +125,9 @@ export class Vehicle {
     this.handbrakeOn = false;
     this.throttleInput = 0;
     this.touchingWall = false;
+    this.wallNormalX = this.wallNormalZ = 0;
     this.lastImpactSpeed = 0;
+    this.frontSlipAngle = this.rearTireSlipAngle = this.frontGripUse = this.rearGripUse = 0;
     this.trackHint = pose.index ?? -1;
     this.onRoad = true;
     this.prevPosition.copy(this.position);
@@ -168,6 +180,8 @@ export class Vehicle {
     }
     if (vf < 0) maxAngle *= st.reverseAngleFactor; // 후진은 완만하게
     this.steerAngle = this.steerInput * maxAngle;
+
+    this.wallAssist = false;
 
     // ── 종방향: 기어(전진/후진), 가속, 제동 ───────────────────
     const accelPedal = this.gear === GEAR_DRIVE ? throttle : brake;
@@ -249,6 +263,11 @@ export class Vehicle {
     const alphaR = Math.atan2(vlr, Math.max(absVf, ty.minSlipSpeed));
     const fr = tireForce(alphaR, ty.rearGrip * surfaceGrip * this.rearGrip, ty);
 
+    this.frontSlipAngle = alphaF;
+    this.rearTireSlipAngle = alphaR;
+    this.frontGripUse = Math.abs(alphaF) / ty.peakSlipAngle;
+    this.rearGripUse = Math.abs(alphaR) / ty.peakSlipAngle;
+
     const latAccel = ff * cD + fr;
     vf += -ff * sD * dt; // 앞바퀴 횡력의 종방향 성분 (코너링 저항)
     vl += latAccel * dt;
@@ -292,6 +311,34 @@ export class Vehicle {
     this.velocity.x = vf * sinH - vl * cosH;
     this.velocity.z = vf * cosH + vl * sinH;
     this.heading -= this.yawRate * dt;
+
+    // 벽 끼임 방지: 벽을 향해 가속 페달을 밟는 중이면 벽에 막혀 속도가 0이어도 차체를 돌릴 수 있게 한다.
+    // 무게중심이 아니라 벽에 닿은 모서리를 축으로 회전시켜, 회전이 모서리를 벽 속으로 밀어 넣지 않게 한다.
+    // 조향 중이면 그 방향으로(최소 선회 속도 wallPivotSpeed 기준), 조향이 없으면 벽면과 나란해지는 쪽으로.
+    if (this.touchingWall && accelPedal > 0 && !(throttle > 0 && brake > 0)) {
+      const dir = this.gear;
+      const into = dir * (sinH * this.wallNormalX + cosH * this.wallNormalZ);
+      if (into > 0.05) {
+        let turn;
+        if (Math.abs(this.steerInput) > 0.1) {
+          turn = (dir * c.collision.wallPivotSpeed * Math.tan(this.steerAngle)) / dim.wheelBase;
+        } else {
+          const d = dir * (cosH * this.wallNormalX - sinH * this.wallNormalZ); // d(into)/d(heading)
+          turn = Math.sign(d) * c.collision.wallAlignRate * Math.min(into * 3, 1);
+        }
+        const dh = -turn * dt;
+        const px = this.position.x + this.wallContactX;
+        const pz = this.position.z + this.wallContactZ;
+        const rx = this.position.x - px;
+        const rz = this.position.z - pz;
+        const cs = Math.cos(dh);
+        const sn = Math.sin(dh);
+        this.position.x = px + rx * cs + rz * sn;
+        this.position.z = pz - rx * sn + rz * cs;
+        this.heading += dh;
+        this.wallAssist = true;
+      }
+    }
 
     this.touchingWall = false;
     this.lastImpactSpeed = 0;
@@ -367,6 +414,10 @@ export class Vehicle {
       if (maxPen <= 0) return;
 
       this.touchingWall = true;
+      this.wallNormalX = nx;
+      this.wallNormalZ = nz;
+      this.wallContactX = rx; // 무게중심 → 접촉 모서리
+      this.wallContactZ = rz;
       this.position.x -= nx * (maxPen + 0.001);
       this.position.z -= nz * (maxPen + 0.001);
 
@@ -378,6 +429,7 @@ export class Vehicle {
       const vcz = this.velocity.z + wAng * pz;
       const vn = vcx * nx + vcz * nz;
       if (vn <= 0) continue; // 이미 벽에서 멀어지는 중
+      const speedBefore = Math.hypot(this.velocity.x, this.velocity.z);
 
       const af = col.angularFactor;
       const rn = px * nx + pz * nz;
@@ -404,6 +456,12 @@ export class Vehicle {
       const keep = 1 - col.speedLoss * headOn;
       this.velocity.x *= keep;
       this.velocity.z *= keep;
+      // 안전장치: 충돌 처리로 속력이 늘어나는 일은 없도록 (회전 충격량 보정 오차 방지)
+      const speedAfter = Math.hypot(this.velocity.x, this.velocity.z);
+      if (speedAfter > speedBefore) {
+        this.velocity.x *= speedBefore / speedAfter;
+        this.velocity.z *= speedBefore / speedAfter;
+      }
 
       this.yawRate = clamp(-wAng, -this.config.stability.maxYawRate, this.config.stability.maxYawRate);
       this.lastImpactSpeed = Math.max(this.lastImpactSpeed, vn);

@@ -11,6 +11,7 @@ export class ExhaustEffects {
     this.config = config;
     this.particles = new TireSmoke(scene, config);
     this.acc = new Map();
+    this.spawnScale = 1; // 그래픽 품질에 따른 생성량 배율
   }
 
   setViewport(heightPx, fovDeg) {
@@ -34,7 +35,7 @@ export class ExhaustEffects {
       this.acc.set(v, 0);
       return;
     }
-    acc += c.spawnRate * amount * outlets.length * dt;
+    acc += c.spawnRate * this.spawnScale * amount * outlets.length * dt;
     const root = v.model.root;
     const h = root.rotation.y;
     const sH = Math.sin(h);

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
-import { ENVIRONMENT_CONFIG, RENDER_CONFIG } from '../config.js';
+import { ENVIRONMENT_CONFIG } from '../config.js';
 import { createGrassTexture, createCloudTexture } from './textures.js';
 import { mulberry32, smoothstep } from '../utils/math.js';
 
@@ -15,6 +15,8 @@ export class Environment {
     this.config = config;
     this.exclusions = exclusions;
     this.rand = mulberry32(config.seed);
+    this.distanceCulled = []; // { mesh, dists(오름차순) } — 품질별 표시 거리 적용용
+    this.vegetationMeshes = [];
 
     this.sunDirection = new THREE.Vector3().setFromSphericalCoords(
       1,
@@ -43,7 +45,8 @@ export class Environment {
     const pmrem = new THREE.PMREMGenerator(renderer);
     const envScene = new THREE.Scene();
     envScene.add(sky);
-    this.scene.environment = pmrem.fromScene(envScene).texture;
+    this.envTarget = pmrem.fromScene(envScene);
+    this.scene.environment = this.envTarget.texture;
     this.scene.environmentIntensity = 0.5;
     pmrem.dispose();
 
@@ -57,13 +60,8 @@ export class Environment {
 
     const sun = new THREE.DirectionalLight(0xfff0d8, 2.7);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(RENDER_CONFIG.shadowMapSize, RENDER_CONFIG.shadowMapSize);
-    const R = RENDER_CONFIG.shadowRange;
+    sun.shadow.mapSize.set(2048, 2048);
     const s = sun.shadow.camera;
-    s.left = -R;
-    s.right = R;
-    s.top = R;
-    s.bottom = -R;
     s.near = 1;
     s.far = 600;
     sun.shadow.bias = -0.0004;
@@ -71,6 +69,43 @@ export class Environment {
     this.scene.add(sun);
     this.scene.add(sun.target);
     this.sun = sun;
+    this.setShadowQuality(2048, 70);
+  }
+
+  /** 그림자 해상도·범위 변경 (그림자 맵만 다시 만들고 재질은 재컴파일하지 않음) */
+  setShadowQuality(mapSize, range) {
+    const sh = this.sun.shadow;
+    if (sh.mapSize.x !== mapSize) {
+      sh.mapSize.set(mapSize, mapSize);
+      if (sh.map) {
+        sh.map.dispose();
+        sh.map = null;
+      }
+    }
+    const cam = sh.camera;
+    cam.left = -range;
+    cam.right = range;
+    cam.top = range;
+    cam.bottom = -range;
+    cam.updateProjectionMatrix();
+  }
+
+  /** 트랙에서 limit(m) 안의 나무·관목만 그린다 — 인스턴스를 거리순으로 정렬해 두었으므로 count 만 조정 */
+  setVegetationDistance(limit) {
+    for (const { mesh, dists } of this.distanceCulled) {
+      let lo = 0;
+      let hi = dists.length;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (dists[mid] <= limit) lo = mid + 1;
+        else hi = mid;
+      }
+      mesh.count = lo;
+    }
+  }
+
+  setVegetationShadows(on) {
+    for (const m of this.vegetationMeshes) m.castShadow = on && m.userData.canCastShadow;
   }
 
   /** 지형 높이: 트랙 근처 평지 → 완만한 언덕 → 외곽 산 */
@@ -170,7 +205,7 @@ export class Environment {
       if (rand() > 0.25 + cluster * 0.75) continue;
       const scale = 0.6 + rand() * 0.9; // 크기 다양화
       const item = {
-        x, y: this.heightAt(x, z, d) - 0.1, z, rotY: rand() * Math.PI * 2,
+        d, x, y: this.heightAt(x, z, d) - 0.1, z, rotY: rand() * Math.PI * 2,
         sx: scale, sy: scale * (0.8 + rand() * 0.5), sz: scale,
       };
       trunks.push(item);
@@ -196,7 +231,7 @@ export class Environment {
       if (rand() > 1.2 - d / 160) continue; // 트랙 가까이 더 많이
       const s = 0.6 + rand() * 1.1;
       bushes.push({
-        x, y: this.heightAt(x, z, d) + 0.2 * s, z, rotY: rand() * 6.28,
+        d, x, y: this.heightAt(x, z, d) + 0.2 * s, z, rotY: rand() * 6.28,
         sx: s * (1 + rand() * 0.6), sy: s * 0.6, sz: s,
         color: new THREE.Color().setHSL(0.24 + rand() * 0.07, 0.5, 0.22 + rand() * 0.1),
       });
@@ -205,6 +240,7 @@ export class Environment {
   }
 
   addInstanced(geometry, material, items, castShadow) {
+    items.sort((a, b) => a.d - b.d); // 트랙에 가까운 것부터 → 표시 거리 = count
     const mesh = new THREE.InstancedMesh(geometry, material, Math.max(items.length, 1));
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();
@@ -220,7 +256,10 @@ export class Environment {
     mesh.castShadow = castShadow;
     mesh.receiveShadow = true;
     mesh.computeBoundingSphere();
+    mesh.userData.canCastShadow = castShadow;
     this.scene.add(mesh);
+    this.distanceCulled.push({ mesh, dists: Float32Array.from(items, (it) => it.d) });
+    this.vegetationMeshes.push(mesh);
     return mesh;
   }
 

@@ -19,6 +19,7 @@ export class DriftEffects {
     this.smoke = new TireSmoke(scene, config.smoke);
     this.skids = new SkidMarks(scene, config.skidMarks);
     this.tracked = new Map(); // vehicle → { trails, spawnAcc }
+    this.spawnScale = 1; // 그래픽 품질에 따른 연기 생성량 배율
   }
 
   setViewport(heightPx, fovDeg) {
@@ -70,7 +71,7 @@ export class DriftEffects {
       const smokeAmount = onAsphalt ? intensity : intensity * sc.offRoadFactor;
 
       if (smokeAmount > 0.05 && dt > 0) {
-        s.spawnAcc[i] += sc.spawnRate * smokeAmount * dt;
+        s.spawnAcc[i] += sc.spawnRate * this.spawnScale * smokeAmount * dt;
         while (s.spawnAcc[i] >= 1) {
           s.spawnAcc[i] -= 1;
           const r = () => (Math.random() - 0.5) * 1.6;

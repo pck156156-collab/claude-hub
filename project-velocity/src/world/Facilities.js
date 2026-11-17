@@ -188,9 +188,16 @@ export function buildFacilities(track) {
   };
   group.add(B.build(materials, { name: 'Facilities' }));
 
+  // 관중 순서를 섞어 두면, 품질 옵션에서 앞쪽 일부만 그려도 관중석 전체에 고르게 분포한다
+  for (let i = crowdBodies.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [crowdBodies[i], crowdBodies[j]] = [crowdBodies[j], crowdBodies[i]];
+    [crowdHeads[i], crowdHeads[j]] = [crowdHeads[j], crowdHeads[i]];
+  }
   const crowdMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85 });
-  group.add(instanced(new THREE.BoxGeometry(0.42, 0.62, 0.3), crowdMat, crowdBodies, { castShadow: false, name: 'CrowdBodies' }));
-  group.add(instanced(new THREE.BoxGeometry(0.2, 0.22, 0.2), crowdMat, crowdHeads, { castShadow: false, name: 'CrowdHeads' }));
+  const bodies = instanced(new THREE.BoxGeometry(0.42, 0.62, 0.3), crowdMat, crowdBodies, { castShadow: false, name: 'CrowdBodies' });
+  const heads = instanced(new THREE.BoxGeometry(0.2, 0.22, 0.2), crowdMat, crowdHeads, { castShadow: false, name: 'CrowdHeads' });
+  group.add(bodies, heads);
 
-  return { group, exclusions, crowdCount: crowdBodies.length };
+  return { group, exclusions, crowdCount: crowdBodies.length, crowdMeshes: [bodies, heads] };
 }

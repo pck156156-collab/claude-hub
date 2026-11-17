@@ -117,6 +117,8 @@ export const VEHICLE_CONFIG = {
     speedLoss: 0.35, // 정면 충돌 시 추가 속도 손실 비율 (비스듬할수록 작아짐)
     angularFactor: 0.6, // 충돌 시 차체 회전 반응 배율
     maxMovePerCheck: 0.5, // 이동 구간 검사 간격 (m) — 고속 관통 방지
+    wallPivotSpeed: 4.5, // 벽에 막혀 정지해도 이 속도로 움직이는 것처럼 조향이 먹게 함 (끼임 방지, m/s)
+    wallAlignRate: 1.2, // 조향 없이 벽을 밀 때 차체를 벽면 방향으로 돌리는 속도 (rad/s)
   },
 
   /** 차체 움직임 (시각 효과 전용 — 물리 좌표에 영향 없음) */
@@ -146,12 +148,67 @@ export const CAR_APPEARANCE = {
   reverseLight: { off: 0, on: 3.2 },
 };
 
-/** 렌더링 품질 / 성능 설정 */
+/** 렌더링 공통 설정 (품질별 값은 QUALITY_PRESETS) */
 export const RENDER_CONFIG = {
-  maxPixelRatio: 1.75, // 고해상도 디스플레이에서 렌더 비용 제한
   exposure: 0.82,
-  shadowMapSize: 2048,
-  shadowRange: 70, // 차량 주변 그림자 영역 반경 (m)
+};
+
+/**
+ * 그래픽 품질 옵션. '높음' = 3단계 그래픽 기준.
+ * 전환 시 오브젝트를 다시 만들지 않고 해상도·그림자·표시 개수·효과량만 바꾼다.
+ */
+export const QUALITY_PRESETS = {
+  low: {
+    label: '낮음',
+    maxPixelRatio: 1,
+    renderScale: 0.75, // CSS 해상도 대비 렌더 해상도
+    shadowMapSize: 1024,
+    shadowRange: 40, // 차량 주변 그림자 반경 (m)
+    vegetationDistance: 160, // 트랙에서 이 거리 안의 나무·관목만 표시 (m)
+    vegetationShadows: false,
+    staticShadows: false, // 시설물·타이어벽 그림자
+    crowdFraction: 0.35,
+    effectsScale: 0.5, // 연기·배기 생성량 배율
+    hudBlur: false, // HUD 배경 흐림(합성 비용 큼)
+  },
+  medium: {
+    label: '보통',
+    maxPixelRatio: 1.25,
+    renderScale: 1,
+    shadowMapSize: 2048,
+    shadowRange: 55,
+    vegetationDistance: 450,
+    vegetationShadows: false,
+    staticShadows: true,
+    crowdFraction: 0.7,
+    effectsScale: 0.75,
+    hudBlur: true,
+  },
+  high: {
+    label: '높음',
+    maxPixelRatio: 1.75,
+    renderScale: 1,
+    shadowMapSize: 2048,
+    shadowRange: 70,
+    vegetationDistance: Infinity,
+    vegetationShadows: true,
+    staticShadows: true,
+    crowdFraction: 1,
+    effectsScale: 1,
+    hudBlur: true,
+  },
+};
+export const DEFAULT_QUALITY = 'high';
+
+/** R 키 차량 복구 */
+export const RECOVERY_CONFIG = {
+  sampleInterval: 0.25, // 안전 지점 기록 주기 (s)
+  maxLateral: 5, // 도로 중심에서 이 거리 안일 때만 안전 (도로 반폭 7m)
+  maxSlipAngle: 0.3, // 미끄러지는 중에는 기록하지 않음 (rad)
+  minForwardSpeed: 2, // 트랙 진행 방향으로 달리고 있을 때만 (m/s)
+  minHeadingAlign: 0.8, // 차체 방향과 트랙 방향의 내적
+  wallCooldown: 1.0, // 벽 충돌 후 이 시간 동안은 기록하지 않음 (s)
+  backOffSamples: 3, // 기록 지점보다 이만큼(×2m) 뒤로 복구
 };
 
 /** 서킷 설정. 컨트롤 포인트(x, z)를 잇는 닫힌 곡선으로 트랙을 만든다. */

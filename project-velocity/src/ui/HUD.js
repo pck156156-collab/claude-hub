@@ -47,6 +47,12 @@ export class HUD {
     }
   }
 
+  /** 차량 복구·재시작 시 표시값을 즉시 0으로 (이전 속도에서 서서히 내려가지 않게) */
+  reset() {
+    this.display = 0;
+    this.lastShown = -1;
+  }
+
   /** 속도 비율(0~1)에 따른 게이지 색 */
   static colorFor(r) {
     let hue;
