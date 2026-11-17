@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Project Velocity</title>
+  </head>
+  <body>
+    <div id="app"></div>
+
+    <div class="hud hud-title">PROJECT VELOCITY</div>
+
+    <div class="hud hud-controls">
+      <div><kbd>W</kbd> 가속</div>
+      <div><kbd>S</kbd> 브레이크 / 후진</div>
+      <div><kbd>A</kbd><kbd>D</kbd> 조향</div>
+      <div><kbd class="wide">Space</kbd> 핸드브레이크</div>
+      <div><kbd>R</kbd> 위치 복구</div>
+    </div>
+
+    <div class="hud hud-speed">
+      <div class="speed-row">
+        <span id="gear" class="gear">N</span>
+        <span id="speed-value" class="speed-value">0</span>
+        <span class="speed-unit">km/h</span>
+      </div>
+      <div class="speed-bar"><div id="speed-bar-fill"></div></div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
