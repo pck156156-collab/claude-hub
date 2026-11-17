@@ -130,6 +130,30 @@ export const VEHICLE_CONFIG = {
   },
 };
 
+/**
+ * 차량 외형 (시각 전용 — 물리와 분리). 색상·재질을 바꾸려면 여기만 수정한다.
+ * 이후 차량 선택/AI 차량은 이 객체를 복제해 bodyColor 등만 바꿔 쓰면 된다.
+ */
+export const CAR_APPEARANCE = {
+  bodyColor: 0xa8101c, // 메탈릭 레드
+  paint: { metalness: 0.6, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.05, envMapIntensity: 1.25 },
+  trimColor: 0x111214, // 범퍼 하단·디퓨저·창틀
+  glassColor: 0x0b1117,
+  rimColor: 0x2a2d32, // 휠 (건메탈)
+  caliperColor: 0xe8b21c,
+  headlightColor: 0xf3f7ff,
+  taillight: { idle: 1.3, brake: 5.5 }, // 후미등 발광 세기 (평상시 / 제동)
+  reverseLight: { off: 0, on: 3.2 },
+};
+
+/** 렌더링 품질 / 성능 설정 */
+export const RENDER_CONFIG = {
+  maxPixelRatio: 1.75, // 고해상도 디스플레이에서 렌더 비용 제한
+  exposure: 0.82,
+  shadowMapSize: 2048,
+  shadowRange: 70, // 차량 주변 그림자 영역 반경 (m)
+};
+
 /** 서킷 설정. 컨트롤 포인트(x, z)를 잇는 닫힌 곡선으로 트랙을 만든다. */
 export const TRACK_CONFIG = {
   roadWidth: 14,
@@ -137,6 +161,9 @@ export const TRACK_CONFIG = {
   sampleSpacing: 2, // 트랙 중심선 샘플 간격 (m)
   curbWidth: 1.2,
   curbCurvatureThreshold: 0.009, // 이 곡률(1/반경) 이상인 코너에 연석 배치
+  cornerCurvatureThreshold: 0.008, // 코너 번호·표지판 배치 기준 (반경 125m 미만)
+  tireWallRadius: 75, // 이 반경 미만 코너의 바깥쪽에는 타이어 방호벽
+  finishLineOffset: 10, // 출발 위치에서 결승선까지 샘플 수 (×2m)
   controlPoints: [
     [-300, -200],
     [0, -220],
@@ -161,13 +188,13 @@ export const TRACK_CONFIG = {
 
 /** 3인칭 추적 카메라 설정 */
 export const CAMERA_CONFIG = {
-  baseFov: 62,
-  maxFovBoost: 14, // 최고속도에서 늘어나는 시야각
-  distance: 7.4,
-  distanceAtSpeed: 1.2, // 고속에서 추가로 멀어지는 거리
-  height: 2.9,
-  lookAhead: 4.5,
-  lookHeight: 1.3,
+  baseFov: 60,
+  maxFovBoost: 16, // 최고속도에서 늘어나는 시야각
+  distance: 6.5,
+  distanceAtSpeed: 1.5, // 고속에서 추가로 멀어지는 거리
+  height: 2.35,
+  lookAhead: 5,
+  lookHeight: 1.0,
   yawSharpness: 4, // 카메라 방향 보간 강도 (낮을수록 급조향 시 회전 지연이 큼)
   positionSharpness: 12,
   lookSharpness: 14,
@@ -191,6 +218,19 @@ export const EFFECTS_CONFIG = {
     color: 0xe9e9e9,
     offRoadFactor: 0.5, // 잔디 위에서의 연기 양 배율
   },
+  exhaust: {
+    maxParticles: 80,
+    spawnRate: 16, // 배기구당 초당 최대 생성 수
+    lifeMin: 0.35,
+    lifeMax: 0.7,
+    startSize: 0.14,
+    endSize: 0.7,
+    maxAlpha: 0.16, // 과장되지 않도록 옅게
+    color: 0x9a9ea5,
+    fadeSpeedStart: 8, // 이 속도부터 배기 연기 감소 (m/s)
+    fadeSpeedEnd: 26,
+    idleAmount: 0.12, // 정지 공회전 시 아주 옅은 배기
+  },
   skidMarks: {
     maxSegments: 1600,
     width: 0.26,
@@ -205,6 +245,8 @@ export const ENVIRONMENT_CONFIG = {
   sunElevation: 38,
   sunAzimuth: 145,
   groundSize: 2600,
-  treeCount: 900,
+  treeCount: 1100,
+  bushCount: 650,
+  cloudCount: 14,
   seed: 20261117,
 };

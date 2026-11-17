@@ -62,8 +62,11 @@ export class DriftEffects {
       const z = root.position.z + cH * w.along - sH * w.side;
 
       // 바퀴별 노면 판정: 스키드 마크는 아스팔트 위에만, 잔디에서는 연기만 약하게
-      const onAsphalt = Math.abs(this.track.getInfo(x, z, this._info, v.trackHint).lateral) <= this.track.halfWidth + 0.1;
-      this.skids.addPoint(s.trails[i], x, z, onAsphalt ? intensity : 0);
+      // 연석도 포함 (노면 판정과 같은 폭). 연석 위에서는 자국을 살짝 높여 묻히지 않게
+      const info = this.track.getInfo(x, z, this._info, v.trackHint);
+      const lat = Math.abs(info.lateral);
+      const onAsphalt = lat <= this.track.surfaceHalfWidth(info.index) + 0.1;
+      this.skids.addPoint(s.trails[i], x, z, onAsphalt ? intensity : 0, lat > this.track.halfWidth ? 0.072 : 0.045);
       const smokeAmount = onAsphalt ? intensity : intensity * sc.offRoadFactor;
 
       if (smokeAmount > 0.05 && dt > 0) {

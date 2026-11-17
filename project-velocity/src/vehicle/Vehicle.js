@@ -31,9 +31,9 @@ function tireForce(slipAngle, maxForce, tires) {
  * 차체 기울기·바퀴 애니메이션은 updateVisual() 에서만 처리하며 물리 좌표에 영향을 주지 않는다.
  */
 export class Vehicle {
-  constructor({ config, color } = {}) {
+  constructor({ config, appearance } = {}) {
     this.config = config;
-    this.model = createCarModel({ color });
+    this.model = createCarModel(appearance);
 
     // ── 물리 상태 ──
     this.position = new THREE.Vector3();
@@ -60,6 +60,7 @@ export class Vehicle {
     this.lastImpactSpeed = 0;
     this.braking = false;
     this.handbrakeOn = false;
+    this.throttleInput = 0; // 배기 효과 연동용
     this.frontSpin = 0;
     this.rearSpin = 0;
 
@@ -112,6 +113,7 @@ export class Vehicle {
     this.lateralAccel = 0;
     this.braking = false;
     this.handbrakeOn = false;
+    this.throttleInput = 0;
     this.touchingWall = false;
     this.lastImpactSpeed = 0;
     this.trackHint = pose.index ?? -1;
@@ -134,7 +136,9 @@ export class Vehicle {
     // ── 노면 판정 ─────────────────────────────────────────────
     const info = track.getInfo(this.position.x, this.position.z, this.trackInfo, this.trackHint);
     this.trackHint = info.index;
-    this.onRoad = Math.abs(info.lateral) <= track.halfWidth + c.surface.roadEdgeTolerance;
+    // 노면 판정: 아스팔트 + 연석(있는 구간)을 도로로 본다 → 그래픽과 판정 일치
+    const surfaceHalf = track.surfaceHalfWidth ? track.surfaceHalfWidth(info.index) : track.halfWidth;
+    this.onRoad = Math.abs(info.lateral) <= surfaceHalf + c.surface.roadEdgeTolerance;
 
     // ── 속도 분해 (차체 기준: 종방향 vf, 횡방향 vl(+ = 오른쪽)) ──
     const sinH = Math.sin(this.heading);
@@ -145,6 +149,7 @@ export class Vehicle {
     const speed = Math.hypot(vf, vl);
     const absVf = Math.abs(vf);
     const { throttle, brake, handbrake } = controls;
+    this.throttleInput = throttle;
 
     // ── 조향: 입력 보간 → 속도에 따른 최대 조향각 제한 ─────────
     const targetSteer = clamp(controls.steer, -1, 1);
@@ -434,5 +439,6 @@ export class Vehicle {
     const visualSteer = this.steerAngle + this.steerInput * c.steering.visualAngleBoost;
     m.setWheelState(-clamp(visualSteer, -c.steering.maxAngle, c.steering.maxAngle), this.frontSpin, this.rearSpin);
     m.setBrakeLights(this.braking);
+    m.setReverseLights(this.gear === GEAR_REVERSE);
   }
 }

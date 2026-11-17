@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { SIMULATION, VEHICLE_CONFIG } from '../config.js';
+import { SIMULATION, VEHICLE_CONFIG, CAR_APPEARANCE, RENDER_CONFIG } from '../config.js';
 import { Input } from './Input.js';
 import { Track } from '../world/Track.js';
 import { Environment } from '../world/Environment.js';
@@ -8,6 +8,8 @@ import { PlayerController } from '../vehicle/PlayerController.js';
 import { ChaseCamera } from '../camera/ChaseCamera.js';
 import { HUD } from '../ui/HUD.js';
 import { DriftEffects } from '../effects/DriftEffects.js';
+import { ExhaustEffects } from '../effects/ExhaustEffects.js';
+import { buildFacilities } from '../world/Facilities.js';
 
 /**
  * 게임 루트.
@@ -20,12 +22,12 @@ export class Game {
     this.container = container;
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, RENDER_CONFIG.maxPixelRatio));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 0.85;
+    this.renderer.toneMappingExposure = RENDER_CONFIG.exposure;
     container.appendChild(this.renderer.domElement);
 
     this.scene = new THREE.Scene();
@@ -33,20 +35,24 @@ export class Game {
 
     this.track = new Track();
     this.scene.add(this.track.mesh);
-    this.environment = new Environment(this.scene, this.renderer, this.track);
+    this.facilities = buildFacilities(this.track);
+    this.scene.add(this.facilities.group);
+    this.environment = new Environment(this.scene, this.renderer, this.track, { exclusions: this.facilities.exclusions });
 
     this.input = new Input(window);
     this.vehicles = [];
     this.startPose = this.track.getStartPose();
 
     this.player = this.addVehicle(
-      new Vehicle({ config: VEHICLE_CONFIG, color: 0xd3202c }),
+      new Vehicle({ config: VEHICLE_CONFIG, appearance: CAR_APPEARANCE }),
       new PlayerController(this.input),
       this.startPose,
     );
 
     this.effects = new DriftEffects(this.scene, this.track);
+    this.exhaust = new ExhaustEffects(this.scene);
     this.effects.setViewport(this.renderer.domElement.height, this.camera.fov);
+    this.vehicleList = this.vehicles.map((e) => e.vehicle);
 
     this.chaseCamera = new ChaseCamera(this.camera);
     this.chaseCamera.snap(this.player.vehicle.position, this.player.vehicle.heading);
@@ -66,6 +72,7 @@ export class Game {
     this.scene.add(vehicle.model.root);
     const entry = { vehicle, controller };
     this.vehicles.push(entry);
+    this.vehicleList = this.vehicles.map((e) => e.vehicle);
     return entry;
   }
 
@@ -112,10 +119,13 @@ export class Game {
     this.chaseCamera.update(
       dt, root.position, root.rotation.y, pv.speed / pv.config.engine.maxSpeed, pv.velocity, pv.forwardSpeed,
     );
-    this.effects.setViewport(this.renderer.domElement.height, this.camera.fov);
-    this.effects.update(dt, this.vehicles.map((e) => e.vehicle));
+    const viewH = this.renderer.domElement.height;
+    this.effects.setViewport(viewH, this.camera.fov);
+    this.exhaust.setViewport(viewH, this.camera.fov);
+    this.effects.update(dt, this.vehicleList);
+    this.exhaust.update(dt, this.vehicleList);
     this.environment.update(root.position);
-    this.hud.update(pv);
+    this.hud.update(pv, dt);
   }
 
   onResize() {
