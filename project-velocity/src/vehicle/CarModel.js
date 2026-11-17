@@ -126,10 +126,15 @@ export function createCarModel({ color = 0xd3202c } = {}) {
   return {
     root,
     body,
-    setWheelState(steerAngle, spinAngle) {
+    /** 앞바퀴 조향각, 앞/뒤 바퀴 회전각 (핸드브레이크 시 뒷바퀴만 멈춤) */
+    setWheelState(steerAngle, frontSpin, rearSpin = frontSpin) {
       for (const w of wheels) {
-        if (w.front) w.pivot.rotation.y = steerAngle;
-        w.spin.rotation.x = spinAngle;
+        if (w.front) {
+          w.pivot.rotation.y = steerAngle;
+          w.spin.rotation.x = frontSpin;
+        } else {
+          w.spin.rotation.x = rearSpin;
+        }
       }
     },
     setBodyTilt(pitch, roll) {

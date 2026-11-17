@@ -56,18 +56,41 @@ export class Track {
     this.mesh = this.buildMesh();
   }
 
-  /** 위치에서 가장 가까운 중심선 샘플과 횡거리(+ = 진행 방향 오른쪽)를 out 에 기록 */
-  getInfo(x, z, out = {}) {
-    let best = 0;
-    let bestD = Infinity;
+  /**
+   * 위치에서 가장 가까운 중심선 샘플과 횡거리(+ = 진행 방향 오른쪽)를 out 에 기록.
+   * hint(직전 인덱스)를 주면 주변만 탐색하고, 결과가 탐색 범위 끝이면 전체 탐색으로 대체한다.
+   */
+  getInfo(x, z, out = {}, hint = -1) {
     const pts = this.points;
-    for (let i = 0; i < this.count; i++) {
-      const dx = x - pts[i].x;
-      const dz = z - pts[i].z;
-      const d = dx * dx + dz * dz;
-      if (d < bestD) {
-        bestD = d;
-        best = i;
+    const n = this.count;
+    let best = -1;
+    let bestD = Infinity;
+    if (hint >= 0) {
+      const W = 24;
+      let bestK = 0;
+      for (let k = -W; k <= W; k++) {
+        const i = (hint + k + n) % n;
+        const dx = x - pts[i].x;
+        const dz = z - pts[i].z;
+        const d = dx * dx + dz * dz;
+        if (d < bestD) {
+          bestD = d;
+          best = i;
+          bestK = k;
+        }
+      }
+      if (Math.abs(bestK) === W) best = -1;
+    }
+    if (best < 0) {
+      bestD = Infinity;
+      for (let i = 0; i < n; i++) {
+        const dx = x - pts[i].x;
+        const dz = z - pts[i].z;
+        const d = dx * dx + dz * dz;
+        if (d < bestD) {
+          bestD = d;
+          best = i;
+        }
       }
     }
     const p = pts[best];

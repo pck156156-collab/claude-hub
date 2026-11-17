@@ -7,6 +7,7 @@ import { Vehicle } from '../vehicle/Vehicle.js';
 import { PlayerController } from '../vehicle/PlayerController.js';
 import { ChaseCamera } from '../camera/ChaseCamera.js';
 import { HUD } from '../ui/HUD.js';
+import { DriftEffects } from '../effects/DriftEffects.js';
 
 /**
  * 게임 루트.
@@ -44,6 +45,9 @@ export class Game {
       this.startPose,
     );
 
+    this.effects = new DriftEffects(this.scene, this.track);
+    this.effects.setViewport(this.renderer.domElement.height, this.camera.fov);
+
     this.chaseCamera = new ChaseCamera(this.camera);
     this.chaseCamera.snap(this.player.vehicle.position, this.player.vehicle.heading);
     this.hud = new HUD();
@@ -68,6 +72,7 @@ export class Game {
   resetPlayer() {
     const v = this.player.vehicle;
     v.reset(this.startPose);
+    this.effects.resetVehicle(v);
     this.chaseCamera.snap(v.position, v.heading);
   }
 
@@ -89,18 +94,26 @@ export class Game {
   update(dt) {
     const step = SIMULATION.fixedTimeStep;
     this.accumulator += dt;
-    while (this.accumulator >= step) {
+    let steps = 0;
+    while (this.accumulator >= step && steps < SIMULATION.maxSubSteps) {
       for (const { vehicle, controller } of this.vehicles) {
         vehicle.step(step, controller.update(step, vehicle), this.track);
       }
       this.accumulator -= step;
+      steps++;
     }
+    // 과도한 지연 시 밀린 계산을 버려 '죽음의 나선'을 방지
+    if (steps === SIMULATION.maxSubSteps) this.accumulator = Math.min(this.accumulator, step);
     const alpha = this.accumulator / step;
     for (const { vehicle } of this.vehicles) vehicle.updateVisual(alpha, dt);
 
     const pv = this.player.vehicle;
     const root = pv.model.root;
-    this.chaseCamera.update(dt, root.position, root.rotation.y, pv.forwardSpeed / pv.config.maxSpeed);
+    this.chaseCamera.update(
+      dt, root.position, root.rotation.y, pv.speed / pv.config.engine.maxSpeed, pv.velocity, pv.forwardSpeed,
+    );
+    this.effects.setViewport(this.renderer.domElement.height, this.camera.fov);
+    this.effects.update(dt, this.vehicles.map((e) => e.vehicle));
     this.environment.update(root.position);
     this.hud.update(pv);
   }
