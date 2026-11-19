@@ -17,6 +17,17 @@ export class ChaseCamera {
     this.lookTarget = new THREE.Vector3();
     this._desired = new THREE.Vector3();
     this._look = new THREE.Vector3();
+    // 차량 기준 상대 오프셋을 보간한다. 절대 위치를 보간하면 속도÷positionSharpness 만큼
+    // 카메라가 뒤처져(최고속도에서 약 5m) 가속할수록 차가 작아지는 문제가 있었다.
+    this.offset = new THREE.Vector3();
+    this.lookOffset = new THREE.Vector3();
+    this._tmp = new THREE.Vector3();
+    // 충격 완충: 차량의 프레임당 이동량을 짧게 보간한 기준점을 따라간다.
+    // 일정 속도에서는 지연이 거의 없고(가속 13m/s² 기준 약 0.1m), 벽 충돌처럼 갑작스러운 변화만 흡수한다.
+    this.base = new THREE.Vector3();
+    this.prevTarget = new THREE.Vector3();
+    this.baseDelta = new THREE.Vector3();
+    this._delta = new THREE.Vector3();
   }
 
   computeDesired(target, yaw, speedRatio) {
@@ -33,6 +44,11 @@ export class ChaseCamera {
     this.yaw = heading;
     this.speedRatio = 0;
     this.computeDesired(target, heading, 0);
+    this.offset.subVectors(this._desired, target);
+    this.lookOffset.subVectors(this._look, target);
+    this.base.copy(target);
+    this.prevTarget.copy(target);
+    this.baseDelta.set(0, 0, 0);
     this.position.copy(this._desired);
     this.lookTarget.copy(this._look);
     this.camera.fov = this.config.baseFov;
@@ -60,8 +76,11 @@ export class ChaseCamera {
     if (Math.abs(lag) > c.maxYawLag) this.yaw = targetYaw + Math.sign(lag) * c.maxYawLag;
     this.speedRatio = lerp(this.speedRatio, clamp(speedRatio, 0, 1), damp(c.fovSharpness, dt));
     this.computeDesired(target, this.yaw, this.speedRatio);
-    this.position.lerp(this._desired, damp(c.positionSharpness, dt));
-    this.lookTarget.lerp(this._look, damp(c.lookSharpness, dt));
+    this.offset.lerp(this._tmp.subVectors(this._desired, target), damp(c.positionSharpness, dt));
+    this.lookOffset.lerp(this._tmp.subVectors(this._look, target), damp(c.lookSharpness, dt));
+    this.followTarget(dt, target);
+    this.position.addVectors(this.base, this.offset);
+    this.lookTarget.addVectors(this.base, this.lookOffset);
 
     const fov = c.baseFov + c.maxFovBoost * this.speedRatio;
     if (Math.abs(fov - this.camera.fov) > 0.01) {
@@ -69,6 +88,21 @@ export class ChaseCamera {
       this.camera.updateProjectionMatrix();
     }
     this.apply();
+  }
+
+  followTarget(dt, target) {
+    const c = this.config;
+    const delta = this._delta.subVectors(target, this.prevTarget);
+    this.prevTarget.copy(target);
+    if (delta.lengthSq() > 100) {
+      // 순간이동(복구 등): 완충 없이 바로 따라감
+      this.base.copy(target);
+      this.baseDelta.set(0, 0, 0);
+      return;
+    }
+    this.baseDelta.lerp(delta, damp(c.impactSmoothing, dt));
+    this.base.add(this.baseDelta);
+    this.base.lerp(target, damp(c.positionSharpness, dt));
   }
 
   apply() {

@@ -245,15 +245,16 @@ export const TRACK_CONFIG = {
 
 /** 3인칭 추적 카메라 설정 */
 export const CAMERA_CONFIG = {
-  baseFov: 60,
-  maxFovBoost: 16, // 최고속도에서 늘어나는 시야각
-  distance: 6.5,
-  distanceAtSpeed: 1.5, // 고속에서 추가로 멀어지는 거리
+  baseFov: 64,
+  maxFovBoost: 5, // 최고속도에서 늘어나는 시야각 (과도한 원근 왜곡 방지)
+  distance: 5.8,
+  distanceAtSpeed: 0.4, // 고속에서 추가로 멀어지는 거리 (가속 시 차가 작아지지 않게)
   height: 2.35,
   lookAhead: 5,
   lookHeight: 1.0,
   yawSharpness: 4, // 카메라 방향 보간 강도 (낮을수록 급조향 시 회전 지연이 큼)
   positionSharpness: 12,
+  impactSmoothing: 10, // 차량 이동량 보간 강도: 충돌 등 급변만 흡수 (높을수록 즉각)
   lookSharpness: 14,
   fovSharpness: 3,
   velocityFollow: 0.55, // 드리프트 시 차체 방향 대신 실제 진행 방향을 따라가는 비율
