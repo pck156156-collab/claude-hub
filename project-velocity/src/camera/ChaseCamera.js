@@ -22,11 +22,12 @@ export class ChaseCamera {
     this.offset = new THREE.Vector3();
     this.lookOffset = new THREE.Vector3();
     this._tmp = new THREE.Vector3();
-    // 충격 완충: 차량의 프레임당 이동량을 짧게 보간한 기준점을 따라간다.
-    // 일정 속도에서는 지연이 거의 없고(가속 13m/s² 기준 약 0.1m), 벽 충돌처럼 갑작스러운 변화만 흡수한다.
+    // 충격 완충: 차량 '속도'를 짧게 보간해 기준점을 이동시킨다.
+    // 프레임당 이동 거리가 아니라 속도(이동 거리 ÷ 프레임 시간)를 보간하므로 프레임 간격이 들쭉날쭉해도
+    // 카메라 거리가 떨리지 않는다. 일정 속도에서는 지연이 없고, 벽 충돌 같은 급변만 흡수한다.
     this.base = new THREE.Vector3();
     this.prevTarget = new THREE.Vector3();
-    this.baseDelta = new THREE.Vector3();
+    this.baseVelocity = new THREE.Vector3();
     this._delta = new THREE.Vector3();
   }
 
@@ -48,7 +49,7 @@ export class ChaseCamera {
     this.lookOffset.subVectors(this._look, target);
     this.base.copy(target);
     this.prevTarget.copy(target);
-    this.baseDelta.set(0, 0, 0);
+    this.baseVelocity.set(0, 0, 0);
     this.position.copy(this._desired);
     this.lookTarget.copy(this._look);
     this.camera.fov = this.config.baseFov;
@@ -97,14 +98,15 @@ export class ChaseCamera {
     const c = this.config;
     const delta = this._delta.subVectors(target, this.prevTarget);
     this.prevTarget.copy(target);
-    if (delta.lengthSq() > 100) {
-      // 순간이동(복구 등): 완충 없이 바로 따라감
+    if (delta.lengthSq() > 100 || dt <= 0) {
+      // 순간이동(복구 등) 또는 시간 정지: 완충 없이 바로 따라감
       this.base.copy(target);
-      this.baseDelta.set(0, 0, 0);
+      if (dt <= 0) return;
+      this.baseVelocity.set(0, 0, 0);
       return;
     }
-    this.baseDelta.lerp(delta, damp(c.impactSmoothing, dt));
-    this.base.add(this.baseDelta);
+    this.baseVelocity.lerp(delta.divideScalar(dt), damp(c.impactSmoothing, dt));
+    this.base.addScaledVector(this.baseVelocity, dt);
     this.base.lerp(target, damp(c.positionSharpness, dt));
   }
 
