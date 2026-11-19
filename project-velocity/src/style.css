@@ -459,3 +459,10 @@ body.no-blur .screen {
   line-height: 1.5;
   min-height: 3em;
 }
+
+.howto .note {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--hud-dim);
+  opacity: 0.85;
+}

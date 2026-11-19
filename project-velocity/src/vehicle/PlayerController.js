@@ -17,7 +17,8 @@ export class PlayerController {
     c.throttle = i.isDown('KeyW', 'ArrowUp') ? 1 : 0;
     c.brake = i.isDown('KeyS', 'ArrowDown') ? 1 : 0;
     c.steer = (i.isDown('KeyD', 'ArrowRight') ? 1 : 0) - (i.isDown('KeyA', 'ArrowLeft') ? 1 : 0);
-    c.handbrake = i.isDown('Space');
+    // Space 외에 Shift 도 핸드브레이크: 일반 키보드는 W+A+Space 같은 조합을 동시에 인식하지 못하는 경우가 많다(고스팅)
+    c.handbrake = i.isDown('Space', 'ShiftLeft', 'ShiftRight');
     return c;
   }
 }

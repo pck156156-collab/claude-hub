@@ -1,6 +1,6 @@
 // 브라우저 기본 동작(스크롤, F3 찾기 등)을 막을 게임 키
 const GAME_KEYS = new Set([
-  'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyR', 'Space', 'Escape', 'F3', 'Enter',
+  'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyR', 'Space', 'ShiftLeft', 'ShiftRight', 'Escape', 'F3', 'Enter',
   'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
 ]);
 

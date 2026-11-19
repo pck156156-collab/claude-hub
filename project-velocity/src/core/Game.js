@@ -343,6 +343,7 @@ export class Game {
       ['종/횡 속도', `${v.forwardSpeed.toFixed(2)} / ${v.lateralSpeed.toFixed(2)} m/s`],
       ['조향', `입력 ${v.steerInput.toFixed(2)}  앞바퀴 ${deg(v.steerAngle)}  요 ${v.yawRate.toFixed(2)} rad/s`],
       ['페달', `가속 ${c.throttle} 브레이크 ${c.brake} 핸드브레이크 ${c.handbrake ? 'ON' : 'off'}`],
+      ['입력 키', [...this.input.down].map((k) => k.replace(/^Key/, '').replace(/^Arrow/, '방향')).join(' + ') || '-'],
       ['드리프트', `${v.driftIntensity > 0.25 ? 'DRIFT' : '-'}${v.driftHolding ? ' 유지' : ''}${v.counterSteering ? ' 카운터' : ''}  강도 ${v.driftIntensity.toFixed(2)}  슬립각 ${deg(v.slipAngle)}`],
       ['타이어', `${grip}`],
       ['  앞/뒤', `슬립 ${deg(v.frontSlipAngle)} / ${deg(v.rearTireSlipAngle)}  사용률 ${pct(v.frontGripUse)} / ${pct(v.rearGripUse)}  뒤 접지 ×${v.rearGrip.toFixed(2)}`],
