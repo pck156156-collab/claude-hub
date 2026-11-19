@@ -53,10 +53,15 @@ export const VEHICLE_CONFIG = {
   /** 조향 */
   steering: {
     maxAngle: 0.6, // 최대 조향각 (rad, ≈34°) — 저속에서 사용
-    speedLimitFactor: 1.2, // 고속 조향각 제한: 접지 한계 횡가속도의 몇 배까지 요구할지
-    speedLimitMargin: 0.03, // 고속 조향각 제한에 더하는 여유각 (rad)
-    steerSpeed: 4.5, // 조향 입력이 차오르는 속도 (1/s)
-    returnSpeed: 6, // 키를 떼면 조향이 중앙으로 돌아오는 속도 (1/s)
+    speedLimitFactor: 1.0, // 고속 조향각 제한: 접지 한계 횡가속도의 몇 배까지 요구할지
+    speedLimitMargin: 0.02, // 고속 조향각 제한에 더하는 여유각 (rad)
+    steerSpeedInitial: 3.0, // 키를 막 눌렀을 때 조향 입력이 차오르는 속도 (1/s) — 짧은 탭 = 미세 조향
+    steerSpeed: 5.0, // 계속 누르고 있을 때의 최대 속도 (1/s)
+    steerRampTime: 0.3, // 초기 속도 → 최대 속도로 바뀌는 데 걸리는 누름 시간 (s)
+    highSpeedSteerRate: 0.55, // 최고속도에서 조향 입력 속도 배율 (고속 과민 반응 방지)
+    returnSpeed: 7, // 키를 떼면 조향이 중앙으로 돌아오는 속도 (1/s)
+    responseExponent: 1.25, // 입력 → 조향각 응답 곡선 (1 = 직선, 클수록 중앙이 섬세)
+    counterSteerGain: 1.0, // 미끄러지는 쪽으로 조향할 때 추가로 허용하는 조향각 (슬립각 배율)
     reverseAngleFactor: 0.6, // 후진 시 조향각 배율
     visualAngleBoost: 0.1, // 고속에서도 앞바퀴 조향이 보이도록 더하는 시각용 각도
   },
@@ -72,26 +77,39 @@ export const VEHICLE_CONFIG = {
     dynamicBlendStart: 2, // 이 속도 이하: 기구학 조향 (저속 안정)
     dynamicBlendEnd: 6, // 이 속도 이상: 타이어 동역학
     lowSpeedLateralDamping: 12,
+    powerOversteer: 0, // 미끄러지는 중 가속 시 뒷바퀴 접지력 감소 비율 (드리프트 모드에서 사용)
   },
 
   /** 핸드브레이크 / 드리프트 */
   handbrake: {
-    rearGripFactor: 0.3, // 드리프트 접지력: 핸드브레이크 시 뒷바퀴 접지력 배율
+    rearGripFactor: 0.32, // 드리프트 접지력: 핸드브레이크 시 뒷바퀴 접지력 배율
     deceleration: 4.5, // 핸드브레이크 제동력
     minSpeed: 4, // 이 속도 이하에서는 핸드브레이크가 접지력에 영향 없음
     fullSpeed: 10, // 이 속도 이상에서 최대 효과
-    engageRate: 6, // 접지력이 떨어지는 속도 (배율/s)
-    recoveryRate: 1.2, // 해제 후 접지력이 회복되는 속도 (배율/s)
+    engageRate: 8, // 접지력이 떨어지는 속도 (지수 보간, 1/s → 약 0.12초)
+    recoveryRate: 2.5, // 해제 후 접지력 회복 속도 (지수 보간, 1/s → 약 0.4초)
+    recoverySlowAtSlip: 0.5, // 크게 미끄러지는 중에는 회복 속도를 이 배율로 늦춤 (튕김 방지)
+    yawKick: 4,
+    driftHoldGrip: 0.72, // 드리프트 유지 조작(미끄러짐 + 가속 + 조향) 중 뒷바퀴 접지력 목표 (1 = 정상)
+    counterGripReturn: 0.35, // 반대 조향을 끝까지 했을 때 유지 접지력에서 정상 쪽으로 되돌리는 비율 (각도 조절 감도) // 핸드브레이크 중 조향 방향 회전 유도 토크 (rad/s², 접지 감소량에 비례)
   },
 
   /** 안정화 (무한 회전 방지) */
   stability: {
-    maxYawRate: 2.2, // rad/s
+    maxYawRate: 2.3, // rad/s
     yawDamping: 0.6,
-    maxSlipAngle: 0.8, // 차체 슬립각 상한 (rad, ≈46°) — 넘으면 복원 토크
-    slipRecovery: 60,
+    yawAssist: 4, // 조향 의도 추종 강도: 조향각이 요구하는 요레이트로 끌어당기는 정도 (1/s)
+    yawIntentGripScale: 0.95, // 의도 요레이트 상한 = 이 배율 × 접지 한계 횡가속 / 속도
+    handbrakeAssistScale: 0.15, // 핸드브레이크 중 의도 추종 배율 (차가 돌아갈 여지)
+    driftHoldAssistScale: 0.3, // 드리프트 유지 조작(미끄러짐 + 가속 + 조향) 중 보정 배율
+    driftAngleHold: 2.5, // 카운터스티어 중 차체 회전을 진행 방향 회전에 맞추는 강도 (1/s) — 드리프트 각도 유지
+    maxSlipAngle: 0.85, // 차체 슬립각 목표 상한 (rad, ≈49°)
+    slipSoftRange: 0.3, // 상한보다 이만큼 앞에서부터 완만하게 복원 시작 (rad)
+    slipRecovery: 25, // 복원 토크 강도 (2차로 증가하므로 경계에서 튀지 않음)
+    slipYawDamping: 3, // 슬립을 키우는 방향의 회전에 대한 추가 감쇠
     hardSlipAngle: 1.13, // 절대 넘지 않는 슬립각 (rad, ≈65°)
-    recoveryAssist: 1.6, // 핸드브레이크 해제 시 진행 방향을 차체 쪽으로 정렬하는 속도 (1/s, 속력 유지)
+    recoveryAssist: 2.2, // 큰 미끄러짐을 진행 방향 쪽으로 정렬하는 속도 (1/s, 속력 유지)
+    recoverySlipStart: 0.05, // 이 슬립각(rad, ≈3°) 이하에는 정렬 보정을 하지 않음 (일반 코너링은 타이어가 처리)
   },
 
   /** 드리프트 판정 (효과·HUD 연동용) */
@@ -261,6 +279,7 @@ export const CAMERA_CONFIG = {
   velocityFollowMinSpeed: 3, // 이 속도 미만에서는 진행 방향 무시 (정지·저속 안정화)
   velocityFollowFullSpeed: 12,
   maxYawLag: 1.0, // 카메라 방향이 목표에서 벌어질 수 있는 최대 각도 (rad)
+  maxYawSpeed: 2.0, // 카메라 방향 회전 속도 상한 (rad/s) — 스핀·급격한 드리프트에서 급회전 방지
 };
 
 /** 드리프트 시각 효과 (개수 상한으로 성능 보호) */

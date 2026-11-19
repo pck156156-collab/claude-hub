@@ -70,7 +70,10 @@ export class ChaseCamera {
       const w = c.velocityFollow * smoothstep(c.velocityFollowMinSpeed, c.velocityFollowFullSpeed, spd);
       if (w > 0) targetYaw = lerpAngle(heading, Math.atan2(velocity.x, velocity.z), w);
     }
-    this.yaw = lerpAngle(this.yaw, targetYaw, damp(c.yawSharpness, dt));
+    // 회전 속도 상한: 스핀·급격한 드리프트에서도 카메라가 휙 돌지 않게 (지연 각도 제한이 최종 안전장치)
+    const yawStep = wrapAngle(targetYaw - this.yaw) * damp(c.yawSharpness, dt);
+    const maxStep = c.maxYawSpeed * dt;
+    this.yaw += clamp(yawStep, -maxStep, maxStep);
     // 급격한 회전 시에도 목표에서 너무 멀어지지 않도록 지연 각도 제한
     const lag = wrapAngle(this.yaw - targetYaw);
     if (Math.abs(lag) > c.maxYawLag) this.yaw = targetYaw + Math.sign(lag) * c.maxYawLag;

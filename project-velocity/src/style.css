@@ -453,3 +453,9 @@ body.no-blur .screen {
   font: 11px/1.5 ui-monospace, Consolas, monospace;
   word-break: break-all;
 }
+
+.mode-desc {
+  font-size: 12px;
+  line-height: 1.5;
+  min-height: 3em;
+}

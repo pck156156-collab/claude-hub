@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { createCarModel } from './CarModel.js';
-import { clamp, lerp, moveTowards, lerpAngle, smoothstep } from '../utils/math.js';
+import { clamp, lerp, moveTowards, lerpAngle, smoothstep, wrapAngle } from '../utils/math.js';
 
 export const GEAR_DRIVE = 1;
 export const GEAR_REVERSE = -1;
@@ -40,7 +40,16 @@ export class Vehicle {
     this.heading = 0;
     this.velocity = new THREE.Vector3();
     this.yawRate = 0;
-    this.steerInput = 0; // 보간된 조향 입력 -1 ~ 1
+    this.steerInput = 0; // 보간된 조향 입력 -1 ~ 1 (가상 아날로그)
+    this.steerHold = 0; // 같은 방향 키를 누르고 있는 시간
+    this.steerHoldDir = 0;
+    this.counterSteering = false;
+    this.driftHolding = false;
+    this.lastVelHeading = null;
+    this.pathYawRate = 0; // 진행 방향 회전 속도 (rad/s, + = 우회전)
+    this.driftHolding = false;
+    this.lastVelHeading = null;
+    this.pathYawRate = 0;
     this.steerAngle = 0; // 실제 앞바퀴 조향각 (rad, + = 오른쪽)
     this.gear = GEAR_DRIVE;
     this.gearTimer = 0;
@@ -109,6 +118,12 @@ export class Vehicle {
     this.velocity.set(0, 0, 0);
     this.yawRate = 0;
     this.steerInput = 0;
+    this.steerHold = 0;
+    this.steerHoldDir = 0;
+    this.counterSteering = false;
+    this.driftHolding = false;
+    this.lastVelHeading = null;
+    this.pathYawRate = 0;
     this.steerAngle = 0;
     this.gear = GEAR_DRIVE;
     this.gearTimer = 0;
@@ -160,15 +175,40 @@ export class Vehicle {
     const startVf = vf;
     const speed = Math.hypot(vf, vl);
     const absVf = Math.abs(vf);
-    const { throttle, brake, handbrake } = controls;
+    // 진행 방향(속도 벡터)의 회전 속도 — 드리프트 각도를 유지하려면 차체가 이 속도로 돌아야 한다
+    const velHeading = Math.atan2(this.velocity.x, this.velocity.z);
+    if (speed > 2 && this.lastVelHeading !== null) {
+      this.pathYawRate = lerp(this.pathYawRate, -wrapAngle(velHeading - this.lastVelHeading) / dt, 0.25);
+    } else {
+      this.pathYawRate = 0;
+    }
+    this.lastVelHeading = speed > 2 ? velHeading : null;
+    const { throttle, brake } = controls;
     this.throttleInput = throttle;
 
-    // ── 조향: 입력 보간 → 속도에 따른 최대 조향각 제한 ─────────
+    // ── 조향: 가상 아날로그 입력 → 응답 곡선 → 속도별 최대 조향각 ─────────
+    // 키보드(0/1) 입력을 아날로그처럼: 누르고 있는 시간이 길수록 조향 입력이 빨리 차오르고,
+    // 짧게 톡 치면 조금만 움직인다. 고속에서는 차오르는 속도 자체를 낮춘다.
     const targetSteer = clamp(controls.steer, -1, 1);
-    const returning = targetSteer === 0 || Math.sign(targetSteer) !== Math.sign(this.steerInput);
-    this.steerInput = moveTowards(
-      this.steerInput, targetSteer, (returning ? st.returnSpeed : st.steerSpeed) * dt,
-    );
+    const handbrake = controls.handbrake;
+    const targetDir = Math.sign(targetSteer);
+    if (targetDir !== 0 && targetDir === this.steerHoldDir) this.steerHold += dt;
+    else {
+      this.steerHold = 0;
+      this.steerHoldDir = targetDir;
+    }
+    const speedRatio = clamp(speed / eng.maxSpeed, 0, 1);
+    let steerRate;
+    if (targetDir === 0) steerRate = st.returnSpeed; // 키를 떼면 중앙으로
+    else if (this.steerInput !== 0 && targetDir !== Math.sign(this.steerInput)) steerRate = st.returnSpeed + st.steerSpeed; // 반대 방향: 중앙 통과는 빠르게
+    else {
+      // 핸드브레이크를 당기고 있으면 '돌리려는 의도'로 보고 고속 감속 배율을 적용하지 않는다
+      steerRate = lerp(st.steerSpeedInitial, st.steerSpeed, smoothstep(0, st.steerRampTime, this.steerHold))
+        * (handbrake ? 1 : lerp(1, st.highSpeedSteerRate, speedRatio));
+    }
+    this.steerInput = moveTowards(this.steerInput, targetSteer, steerRate * dt);
+    // 응답 곡선: 중앙 부근은 둔하게(미세 조정), 끝으로 갈수록 크게
+    const shapedSteer = Math.sign(this.steerInput) * Math.abs(this.steerInput) ** st.responseExponent;
     const totalGrip = ty.frontGrip + ty.rearGrip;
     let maxAngle = Math.min(
       st.maxAngle,
@@ -176,10 +216,22 @@ export class Vehicle {
     );
     // 카운터스티어: 미끄러지는 쪽으로 조향할 때는 슬립각만큼 추가 조향 허용
     if (Math.abs(vl) > 0.5 && Math.sign(this.steerInput) === Math.sign(vl)) {
-      maxAngle = Math.min(st.maxAngle, maxAngle + Math.abs(this.slipAngle));
+      // 최대 반대 조향 = 슬립각 × 이득 (앞바퀴가 대략 진행 방향을 향함). 슬립이 줄면 함께 줄어
+      // 키를 끝까지 누르고 있어도 과도한 반대 조향으로 차가 반대로 튀지 않는다 (키보드용 보정)
+      maxAngle = Math.min(st.maxAngle, Math.max(maxAngle, Math.abs(this.slipAngle) * st.counterSteerGain));
     }
     if (vf < 0) maxAngle *= st.reverseAngleFactor; // 후진은 완만하게
-    this.steerAngle = this.steerInput * maxAngle;
+    this.steerAngle = shapedSteer * maxAngle;
+    // 드리프트 유지 조작 판정: 미끄러지는 중 + 가속 + 미끄러지는 쪽으로 조향(카운터스티어)
+    const counterHold = throttle > 0 && Math.abs(this.slipAngle) > 0.1 && this.steerInput !== 0
+      && Math.sign(this.steerInput) === Math.sign(vl);
+    // 드리프트 유지 의도: 미끄러지는 중 + 가속 + 조향 조작 중(방향 무관 — 각도 유지에는 양방향 조향이 필요)
+    // 조향을 풀면 의도가 없는 것으로 보고 정상적으로 자세를 되찾는다
+    // 히스테리시스: 한 번 드리프트에 들어가면 슬립 5° 아래로 내려갈 때까지 유지로 본다 (8° 경계에서 깜빡이지 않게)
+    const intentSlip = this.driftHolding ? 0.09 : 0.14;
+    const driftIntent = throttle > 0 && Math.abs(this.slipAngle) > intentSlip && Math.abs(this.steerInput) > 0.2 && speed > 8;
+    this.counterSteering = counterHold;
+    this.driftHolding = driftIntent;
 
     this.wallAssist = false;
 
@@ -239,10 +291,17 @@ export class Vehicle {
     // ── 핸드브레이크: 뒷바퀴 접지력 감소 / 해제 시 점진 회복 ─────
     const hb = c.handbrake;
     const hbEffect = handbrake ? smoothstep(hb.minSpeed, hb.fullSpeed, speed) : 0;
-    const targetRearGrip = lerp(1, hb.rearGripFactor, hbEffect);
-    this.rearGrip = moveTowards(
-      this.rearGrip, targetRearGrip, (targetRearGrip < this.rearGrip ? hb.engageRate : hb.recoveryRate) * dt,
-    );
+    // 핸드브레이크를 놓아도 드리프트 유지 조작 중이면 뒷바퀴 접지력을 일부 낮게 유지 (프리셋별, 아케이드는 약하게)
+    // 카운터스티어를 많이 할수록 접지력을 더 돌려준다 → 조향으로 드리프트 각도를 조절 (반대 조향↑ = 각도↓)
+    const counterAmount = counterHold ? Math.abs(shapedSteer) : 0;
+    const holdGrip = lerp(hb.driftHoldGrip, 1, hb.counterGripReturn * counterAmount);
+    const targetRearGrip = handbrake ? lerp(1, hb.rearGripFactor, hbEffect) : driftIntent ? holdGrip : 1;
+    // 지수형 변화: 당기면 빠르게(순간적이지는 않게) 떨어지고, 놓으면 미끄러짐이 클수록 천천히 회복
+    // → 큰 슬립각에서 접지력이 한꺼번에 돌아와 차가 반대로 튕기는 현상 방지
+    const gripRate = targetRearGrip < this.rearGrip
+      ? hb.engageRate
+      : hb.recoveryRate * lerp(1, hb.recoverySlowAtSlip, smoothstep(0.15, 0.6, Math.abs(this.slipAngle)));
+    this.rearGrip += (targetRearGrip - this.rearGrip) * (1 - Math.exp(-gripRate * dt));
 
     // ── 타이어 횡력 (슬립각 기반) ─────────────────────────────
     const surfaceGrip = this.onRoad ? 1 : c.surface.offRoadGripFactor;
@@ -261,7 +320,12 @@ export class Vehicle {
 
     const vlr = vl - r * b;
     const alphaR = Math.atan2(vlr, Math.max(absVf, ty.minSlipSpeed));
-    const fr = tireForce(alphaR, ty.rearGrip * surfaceGrip * this.rearGrip, ty);
+    // 파워 오버스티어: 이미 미끄러지는 중에 가속하면 뒷바퀴 접지력이 더 줄어 드리프트가 이어짐 (프리셋별)
+    // (드리프트 유지 조작 중에만 — 조향을 풀면 정상적으로 접지를 되찾고, 반대 조향을 많이 할수록 약해진다)
+    const power = vf > 0 && driftIntent
+      ? ty.powerOversteer * throttle * smoothstep(0.08, 0.3, Math.abs(this.slipAngle)) * (1 - 0.7 * counterAmount)
+      : 0;
+    const fr = tireForce(alphaR, ty.rearGrip * surfaceGrip * this.rearGrip * (1 - power), ty);
 
     this.frontSlipAngle = alphaF;
     this.rearTireSlipAngle = alphaR;
@@ -274,12 +338,37 @@ export class Vehicle {
 
     let yawAccel = (a * ff * cD - b * fr) / dim.yawInertia;
 
-    // ── 안정화: 요 감쇠 + 과도한 슬립각 복원 ──────────────────
+    // ── 안정화 ──────────────────────────────────────────────
     const sb = c.stability;
     yawAccel -= sb.yawDamping * r;
+    // (1) 조향 의도 추종: 조향각이 요구하는 요레이트(접지 한계로 제한) 쪽으로 부드럽게 끌어당김
+    //     → 코너 진입·탈출 자세가 매끄럽고, 좌우 연타에도 차체가 출렁이지 않음.
+    //     핸드브레이크·드리프트 유지 중에는 약하게 해 차가 돌아갈 여지를 남긴다.
+    if (vf > ty.dynamicBlendStart) {
+      const rIntent = (vf * Math.tan(this.steerAngle)) / dim.wheelBase;
+      const rLimit = (sb.yawIntentGripScale * totalGrip) / Math.max(speed, 3);
+      // 카운터스티어 중에는 '반대로 돌라'가 아니라 '회전을 멈추고 각도를 유지하라'는 뜻으로 해석:
+      // 목표 = 진행 방향의 회전 속도(슬립각 유지). 그렇지 않으면 조향각이 요구하는 요레이트.
+      if (counterHold && !handbrake) {
+        // 각도 유지: 차체 회전을 진행 방향 회전에 맞춘다 (각도 변화는 반대 조향량 → 뒷바퀴 접지 회복으로 조절)
+        yawAccel += sb.driftAngleHold * (clamp(this.pathYawRate, -rLimit * 1.5, rLimit * 1.5) - r);
+      } else {
+        const rTarget = clamp(rIntent, -rLimit, rLimit);
+        const assist = sb.yawAssist * (handbrake ? sb.handbrakeAssistScale : 1) * (driftIntent ? sb.driftHoldAssistScale : 1);
+        yawAccel += assist * (rTarget - r);
+      }
+    }
+    // 핸드브레이크 회전 유도: 당기고 있는 동안 조향 방향으로 약한 회전 토크 (속도·접지 감소량에 비례)
+    yawAccel += hb.yawKick * shapedSteer * hbEffect * (1 - this.rearGrip) / (1 - hb.rearGripFactor + 1e-6);
+    // (2) 과도한 슬립각 완만 제한: (maxSlipAngle - slipSoftRange) 부터 0에서 시작해 2차로 커지는 복원 토크
+    //     + 슬립을 더 키우는 방향의 회전만 추가 감쇠 → 경계에서 '탁' 하고 튀지 않음
     const beta = Math.atan2(vl, Math.max(absVf, 1));
-    const over = Math.abs(beta) - sb.maxSlipAngle;
-    if (over > 0 && vf > 0) yawAccel += Math.sign(beta) * over * sb.slipRecovery;
+    const over = Math.abs(beta) - (sb.maxSlipAngle - sb.slipSoftRange);
+    if (over > 0 && vf > 0) {
+      const k = Math.min(over / sb.slipSoftRange, 1.5);
+      yawAccel += Math.sign(beta) * sb.slipRecovery * over * k;
+      if (Math.sign(r) === -Math.sign(beta)) yawAccel -= sb.slipYawDamping * k * r;
+    }
 
     this.yawRate += yawAccel * dt;
 
@@ -298,7 +387,14 @@ export class Vehicle {
     //  2) 최종 안전장치: 슬립각 상한(hardSlipAngle)을 절대 넘지 않음
     if (vf > 0) {
       const slip = Math.atan2(vl, vf);
-      let newSlip = handbrake ? slip : slip * Math.exp(-sb.recoveryAssist * this.rearGrip * dt);
+      let newSlip = slip;
+      if (!handbrake) {
+        // 일반 코너링의 작은 슬립은 타이어에 맡기고 큰 미끄러짐만 정렬.
+        // 드리프트를 유지하려는 조작(가속 + 카운터스티어) 중에는 약하게 → 자동 복구가 조작을 덮지 않음
+        const engage = smoothstep(sb.recoverySlipStart, sb.recoverySlipStart * 3, Math.abs(slip));
+        const strength = sb.recoveryAssist * this.rearGrip * engage * (driftIntent ? sb.driftHoldAssistScale : 1);
+        newSlip = slip * Math.exp(-strength * dt);
+      }
       newSlip = clamp(newSlip, -sb.hardSlipAngle, sb.hardSlipAngle);
       if (newSlip !== slip) {
         const spd = Math.hypot(vf, vl);

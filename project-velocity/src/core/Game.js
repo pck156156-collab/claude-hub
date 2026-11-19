@@ -8,6 +8,7 @@ import { Track } from '../world/Track.js';
 import { Environment } from '../world/Environment.js';
 import { buildFacilities } from '../world/Facilities.js';
 import { Vehicle } from '../vehicle/Vehicle.js';
+import { DRIVING_PRESETS, DEFAULT_DRIVING_MODE, buildVehicleConfig } from '../vehicle/drivingPresets.js';
 import { PlayerController } from '../vehicle/PlayerController.js';
 import { ChaseCamera } from '../camera/ChaseCamera.js';
 import { HUD } from '../ui/HUD.js';
@@ -69,7 +70,9 @@ export class Game {
       onStart: () => this.startRace(),
       onResume: () => this.resume(),
       onQuality: (level) => this.quality.set(level),
+      onDrivingMode: (mode) => this.setDrivingMode(mode),
     });
+    this.setDrivingMode(loadDrivingMode());
     this.quality.onChange((level) => this.menus.setQuality(level));
     this.menus.setQuality(this.quality.level);
     this.quality.apply();
@@ -165,6 +168,22 @@ export class Game {
       this.input.reset();
       this.accumulator = 0;
     }
+  }
+
+  /**
+   * 주행 모드 변경: 같은 물리 엔진에 프리셋 설정값만 교체한다.
+   * 위치·속도·방향·요레이트 같은 차량 상태는 그대로 두므로 바꾸는 순간 속도·방향이 튀지 않는다.
+   * (메뉴는 시작 화면·일시정지 중에만 열리므로 다음 주행부터 바로 적용된다)
+   */
+  setDrivingMode(mode) {
+    this.drivingMode = DRIVING_PRESETS[mode] ? mode : DEFAULT_DRIVING_MODE;
+    this.player.vehicle.config = buildVehicleConfig(this.drivingMode);
+    try {
+      localStorage.setItem(DRIVING_MODE_KEY, this.drivingMode);
+    } catch {
+      /* 저장할 수 없는 환경이면 이번 세션에만 적용 */
+    }
+    this.menus?.setDrivingMode(this.drivingMode);
   }
 
   /** R 키: 최근 안전 지점(없으면 출발 위치)에 트랙 방향으로 복구 */
@@ -318,13 +337,13 @@ export class Game {
     const info = this.renderer.info.render;
     const sp = this.player.safePoints;
     return [
-      ['상태', `${this.state.current}  품질 ${this.quality.preset.label}`],
+      ['상태', `${this.state.current}  품질 ${this.quality.preset.label}  주행 ${DRIVING_PRESETS[this.drivingMode].label}`],
       ['FPS', `${this.debug.fps.toFixed(0)}  (${this.debug.frameMs.toFixed(1)} ms)  draw ${info.calls} / tri ${(info.triangles / 1000).toFixed(0)}k`],
       ['속도', `${v.speedKmh.toFixed(1)} km/h  기어 ${v.gear > 0 ? 'D' : 'R'}`],
       ['종/횡 속도', `${v.forwardSpeed.toFixed(2)} / ${v.lateralSpeed.toFixed(2)} m/s`],
       ['조향', `입력 ${v.steerInput.toFixed(2)}  앞바퀴 ${deg(v.steerAngle)}  요 ${v.yawRate.toFixed(2)} rad/s`],
       ['페달', `가속 ${c.throttle} 브레이크 ${c.brake} 핸드브레이크 ${c.handbrake ? 'ON' : 'off'}`],
-      ['드리프트', `${v.driftIntensity > 0.25 ? 'DRIFT' : '-'}  강도 ${v.driftIntensity.toFixed(2)}  슬립각 ${deg(v.slipAngle)}`],
+      ['드리프트', `${v.driftIntensity > 0.25 ? 'DRIFT' : '-'}${v.driftHolding ? ' 유지' : ''}${v.counterSteering ? ' 카운터' : ''}  강도 ${v.driftIntensity.toFixed(2)}  슬립각 ${deg(v.slipAngle)}`],
       ['타이어', `${grip}`],
       ['  앞/뒤', `슬립 ${deg(v.frontSlipAngle)} / ${deg(v.rearTireSlipAngle)}  사용률 ${pct(v.frontGripUse)} / ${pct(v.rearGripUse)}  뒤 접지 ×${v.rearGrip.toFixed(2)}`],
       ['노면', `${v.onRoad ? 'ON ROAD' : 'OFF ROAD'}  ${surface}  횡 ${lat.toFixed(1)} m`],
@@ -359,4 +378,16 @@ export class Game {
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }
+}
+
+const DRIVING_MODE_KEY = 'project-velocity.driving-mode';
+
+function loadDrivingMode() {
+  try {
+    const v = localStorage.getItem(DRIVING_MODE_KEY);
+    if (v && DRIVING_PRESETS[v]) return v;
+  } catch {
+    /* 무시 */
+  }
+  return DEFAULT_DRIVING_MODE;
 }

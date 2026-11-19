@@ -1,4 +1,5 @@
 import { QUALITY_PRESETS } from '../config.js';
+import { DRIVING_PRESETS } from '../vehicle/drivingPresets.js';
 import { STATE } from '../core/GameState.js';
 
 const PAUSE_REASON = {
@@ -13,7 +14,7 @@ const PAUSE_REASON = {
  * 그래픽 품질 선택 버튼은 시작 화면과 일시정지 화면에 같은 방식으로 들어간다.
  */
 export class Menus {
-  constructor({ onStart, onResume, onQuality }) {
+  constructor({ onStart, onResume, onQuality, onDrivingMode }) {
     this.screens = {
       [STATE.TITLE]: document.getElementById('screen-title'),
       [STATE.PAUSED]: document.getElementById('screen-pause'),
@@ -26,8 +27,23 @@ export class Menus {
     document.getElementById('btn-start').addEventListener('click', () => onStart());
     document.getElementById('btn-resume').addEventListener('click', () => onResume());
 
+    this.modeButtons = [];
+    for (const group of document.querySelectorAll('.mode-group')) {
+      for (const [mode, preset] of Object.entries(DRIVING_PRESETS)) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'quality-option';
+        btn.dataset.mode = mode;
+        btn.textContent = preset.label;
+        btn.addEventListener('click', () => onDrivingMode(mode));
+        group.appendChild(btn);
+        this.modeButtons.push(btn);
+      }
+    }
+    this.modeDescriptions = [...document.querySelectorAll('.mode-desc')];
+
     this.qualityButtons = [];
-    for (const group of document.querySelectorAll('.quality-group')) {
+    for (const group of document.querySelectorAll('.quality-group:not(.mode-group)')) {
       for (const [level, preset] of Object.entries(QUALITY_PRESETS)) {
         const btn = document.createElement('button');
         btn.type = 'button';
@@ -47,6 +63,11 @@ export class Menus {
     const focusTarget = state === STATE.TITLE ? 'btn-start' : state === STATE.PAUSED ? 'btn-resume' : null;
     if (focusTarget) document.getElementById(focusTarget).focus({ preventScroll: true });
     else if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  }
+
+  setDrivingMode(mode) {
+    for (const btn of this.modeButtons) btn.setAttribute('aria-pressed', String(btn.dataset.mode === mode));
+    for (const p of this.modeDescriptions) p.textContent = DRIVING_PRESETS[mode]?.description ?? '';
   }
 
   setQuality(level) {
