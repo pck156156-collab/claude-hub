@@ -29,7 +29,11 @@ export class Player {
   /** 조준점까지의 수평 거리 */
   aimDistance = 10;
   health = PLAYER_CONFIG.maxHealth;
-  readonly maxHealth = PLAYER_CONFIG.maxHealth;
+  /** 강화로 바뀌는 능력치 (기본값은 설정 파일) */
+  maxHealth: number = PLAYER_CONFIG.maxHealth;
+  moveSpeed: number = PLAYER_CONFIG.moveSpeed;
+  /** 받는 피해 감소율 0~1 */
+  damageReduction = 0;
   /** 남은 피격 무적 시간 */
   invulnerable = 0;
   dead = false;
@@ -58,8 +62,10 @@ export class Player {
   receiveAttack(hit: HitInfo): boolean {
     if (this.dead) return false;
     if (this.invulnerable > 0) { this.blockedHits++; return false; }
-    this.health = Math.max(0, this.health - hit.damage);
-    this.damageTaken += hit.damage;
+    const dmg = hit.damage * (1 - this.damageReduction);
+    this.health = Math.max(0, this.health - dmg);
+    this.damageTaken += dmg;
+    this.lastDamage = dmg;
     this.invulnerable = PLAYER_CONFIG.invulnerableTime;
     this.onDamaged?.(hit);
     if (this.health <= 0) {
@@ -70,7 +76,24 @@ export class Player {
     return true;
   }
 
-  /** 다시 시작 */
+  /** 마지막으로 받은 실제 피해 (감소 적용 후) */
+  lastDamage = 0;
+
+  /** 회복 (최대 체력 초과 불가) */
+  heal(amount: number): number {
+    if (this.dead) return 0;
+    const before = this.health;
+    this.health = Math.min(this.maxHealth, this.health + amount);
+    return this.health - before;
+  }
+
+  /** 최대 체력 변경. 늘어난 만큼 현재 체력도 회복할지 선택 */
+  setMaxHealth(max: number): void {
+    this.maxHealth = max;
+    this.health = Math.min(this.health, max);
+  }
+
+  /** 다시 시작 (능력치 기본값 복원은 강화 시스템이 reset 으로 처리) */
   revive(spawn: THREE.Vector3): void {
     this.health = this.maxHealth;
     this.invulnerable = 0;
@@ -99,8 +122,8 @@ export class Player {
     let mz = cmd.moveZ;
     const len = Math.hypot(mx, mz);
     if (len > 1) { mx /= len; mz /= len; } // 대각선 정규화
-    const tx = mx * c.moveSpeed;
-    const tz = mz * c.moveSpeed;
+    const tx = mx * this.moveSpeed;
+    const tz = mz * this.moveSpeed;
     const dvx = tx - this.velocity.x;
     const dvz = tz - this.velocity.z;
     const dv = Math.hypot(dvx, dvz);

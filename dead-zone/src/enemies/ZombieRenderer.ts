@@ -46,6 +46,8 @@ export class ZombieRenderer {
   private readonly right = new THREE.Vector3();
   private readonly palette: { skin: THREE.Color[]; shirt: THREE.Color[]; pants: THREE.Color[] };
   private readonly disposables: { dispose(): void }[] = [];
+  /** 애니메이션 시계 (게임이 멈추면 같이 멈춤) */
+  private clock = 0;
 
   constructor(private readonly scene: THREE.Scene, appearance: { skin: number[]; shirts: number[]; pants: number[] }) {
     this.palette = {
@@ -102,6 +104,7 @@ export class ZombieRenderer {
 
   /** 렌더 프레임마다: 좀비 상태 → 자세 → 인스턴스 행렬 */
   update(dt: number, zombies: readonly Zombie[], alpha: number, camera: THREE.Camera): void {
+    this.clock += dt;
     const counts = new Map<string, number>();
     for (const p of this.parts) counts.set(p.key, 0);
     let barCount = 0;
@@ -190,7 +193,7 @@ export class ZombieRenderer {
     const hunch = s.appearance.hunch;
     const pos = this.v.lerpVectors(z.prevPosition, z.position, alpha);
     const yaw = z.prevYaw + wrapAngle(z.yaw - z.prevYaw) * alpha;
-    const t = performance.now() / 1000 + z.variant * 7;
+    const t = this.clock + z.variant * 7;
 
     const moving = z.state === ZombieState.Chase ? clamp(z.moveSpeed / s.moveSpeed, 0, 1.2) : 0;
     a.walk += (moving - a.walk) * damp(8, dt);

@@ -24,6 +24,10 @@ interface Projectile {
   range: number;
   damage: number;
   sourceId: string;
+  /** 남은 추가 관통 수 */
+  pierceLeft: number;
+  /** 이 탄이 이미 맞힌 대상 (같은 좀비에게 두 번 피해 주지 않음) */
+  hits: Damageable[];
   /** 이번 스텝에 사라졌지만 마지막 위치까지 그리기 위한 플래그 */
   dying: boolean;
   mesh: THREE.Mesh;
@@ -46,7 +50,7 @@ export class ProjectileSystem {
   private readonly material: THREE.MeshBasicMaterial;
   private readonly tmp = new THREE.Vector3();
   /** 누적 통계 (디버그 · 테스트) */
-  stats = { spawned: 0, expired: 0, hitWorld: 0, hitTarget: 0, recycled: 0 };
+  stats = { spawned: 0, expired: 0, hitWorld: 0, hitTarget: 0, recycled: 0, pierced: 0 };
 
   onImpact: ((e: ImpactEvent) => void) | null = null;
 
@@ -63,7 +67,7 @@ export class ProjectileSystem {
       scene.add(mesh);
       this.pool.push({
         active: false, dying: false, pos: new THREE.Vector3(), prev: new THREE.Vector3(), dir: new THREE.Vector3(),
-        speed: 0, traveled: 0, range: 0, damage: 0, sourceId: '', mesh,
+        speed: 0, traveled: 0, range: 0, damage: 0, sourceId: '', pierceLeft: 0, hits: [], mesh,
       });
     }
   }
@@ -99,6 +103,8 @@ export class ProjectileSystem {
     p.range = shot.stats.range;
     p.damage = shot.stats.damage;
     p.sourceId = shot.stats.id;
+    p.pierceLeft = shot.stats.pierce ?? 0;
+    p.hits.length = 0;
     p.traveled = 0;
     this.stats.spawned++;
     // 저프레임에서 늦게 발사된 만큼 앞으로 진행
@@ -143,39 +149,60 @@ export class ProjectileSystem {
     this.material.dispose();
   }
 
+  /**
+   * 한 스텝 이동: 이동 구간(선분) 전체를 검사하므로 빠른 탄도 대상을 건너뛰지 않는다.
+   * 관통이 남아 있으면 맞힌 대상을 기록하고 같은 구간의 나머지를 계속 검사한다.
+   */
   private advance(p: Projectile, dt: number): void {
     let move = p.speed * dt;
     const remaining = p.range - p.traveled;
     let expire = false;
     if (move >= remaining) { move = remaining; expire = true; }
-    const x0 = p.pos.x;
-    const z0 = p.pos.z;
-    const x1 = x0 + p.dir.x * move;
-    const z1 = z0 + p.dir.z * move;
-
-    const wall = this.collision.raycast(x0, z0, x1, z1, p.pos.y, this.hit);
-    const wallT = wall ? wall.t : Infinity;
-    const target = this.targets.raycast(x0, z0, x1, z1, p.pos.y);
     const e = this.impact;
-    if (target && target.t <= wallT) {
-      const t = target.t;
-      e.point.set(x0 + (x1 - x0) * t, p.pos.y, z0 + (z1 - z0) * t);
-      e.normal.copy(p.dir).negate();
-      e.target = target.target;
-      this.stats.hitTarget++;
-      this.finish(p, e, move * t);
-      return;
+    for (let guard = 0; guard < 8; guard++) {
+      const x0 = p.pos.x;
+      const z0 = p.pos.z;
+      const x1 = x0 + p.dir.x * move;
+      const z1 = z0 + p.dir.z * move;
+      const wall = this.collision.raycast(x0, z0, x1, z1, p.pos.y, this.hit);
+      const wallT = wall ? wall.t : Infinity;
+      const target = this.targets.raycast(x0, z0, x1, z1, p.pos.y, p.hits);
+      if (target && target.t <= wallT) {
+        const t = target.t;
+        e.point.set(x0 + (x1 - x0) * t, p.pos.y, z0 + (z1 - z0) * t);
+        e.normal.copy(p.dir).negate();
+        e.target = target.target;
+        this.stats.hitTarget++;
+        if (p.pierceLeft > 0) {
+          // 관통: 피해를 주고 계속 날아감
+          p.pierceLeft--;
+          p.hits.push(target.target);
+          this.stats.pierced++;
+          e.direction.copy(p.dir);
+          e.damage = p.damage;
+          e.sourceId = p.sourceId;
+          this.onImpact?.(e);
+          p.pos.copy(e.point);
+          p.traveled += move * t;
+          move *= 1 - t;
+          continue;
+        }
+        p.hits.push(target.target);
+        this.finish(p, e, move * t);
+        return;
+      }
+      if (wall) {
+        e.point.set(wall.x, p.pos.y, wall.z);
+        e.normal.set(wall.nx, 0, wall.nz);
+        e.target = null;
+        this.stats.hitWorld++;
+        this.finish(p, e, move * wall.t);
+        return;
+      }
+      p.pos.set(x1, p.pos.y, z1);
+      p.traveled += move;
+      break;
     }
-    if (wall) {
-      e.point.set(wall.x, p.pos.y, wall.z);
-      e.normal.set(wall.nx, 0, wall.nz);
-      e.target = null;
-      this.stats.hitWorld++;
-      this.finish(p, e, move * wall.t);
-      return;
-    }
-    p.pos.set(x1, p.pos.y, z1);
-    p.traveled += move;
     if (expire) {
       p.active = false;
       p.dying = true;

@@ -12,6 +12,8 @@ export interface WeaponStats {
   damage: number;
   spreadDeg: number;
   autoReloadOnEmpty: boolean;
+  /** 추가 관통 수 (강화) */
+  pierce?: number;
 }
 
 /** 무기를 들고 있는 대상이 제공하는 총구 정보 (플레이어 · 향후 다른 사수) */
@@ -51,9 +53,13 @@ export class Weapon {
   /** 누적 발사 수 (테스트 · 디버그용) */
   shotsFired = 0;
 
-  constructor(readonly stats: WeaponStats, private readonly socket: WeaponSocket, private readonly random: () => number = Math.random) {
-    this.ammo = stats.magazineSize;
-    this.shot = { origin: new THREE.Vector3(), direction: new THREE.Vector3(), stats, elapsed: 0 };
+  /** 현재 능력치 (기본값 + 강화). 기본값은 baseStats 에 보존 */
+  stats: WeaponStats;
+
+  constructor(readonly baseStats: WeaponStats, private readonly socket: WeaponSocket, private readonly random: () => number = Math.random) {
+    this.stats = { ...baseStats };
+    this.ammo = baseStats.magazineSize;
+    this.shot = { origin: new THREE.Vector3(), direction: new THREE.Vector3(), stats: this.stats, elapsed: 0 };
   }
 
   addListener(l: WeaponListener): void {
@@ -115,6 +121,19 @@ export class Weapon {
     if (this.cooldown < 0) this.cooldown = 0;
     // 마지막 탄을 쏘면 방아쇠와 상관없이 바로 스스로 재장전
     if (this.ammo === 0 && this.stats.autoReloadOnEmpty) this.requestReload();
+  }
+
+  /**
+   * 강화로 바뀐 능력치 적용. 탄창이 커지면 늘어난 만큼 탄을 채워 주고, 줄면 넘치는 탄을 버린다.
+   * 발사 간격 · 재장전 시간은 다음 발사 · 다음 재장전부터 반영된다.
+   */
+  applyStats(over: Partial<WeaponStats>): void {
+    const oldMag = this.stats.magazineSize;
+    this.stats = { ...this.baseStats, ...over };
+    this.shot.stats = this.stats;
+    const diff = this.stats.magazineSize - oldMag;
+    if (!this.reloading) this.ammo = Math.max(0, Math.min(this.stats.magazineSize, this.ammo + Math.max(0, diff)));
+    else this.ammo = Math.min(this.ammo, this.stats.magazineSize);
   }
 
   /** 다시 시작: 탄창 가득 · 재장전 취소 */

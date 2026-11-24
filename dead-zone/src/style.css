@@ -113,6 +113,60 @@ kbd.wide { min-width: 0; }
 .kills.bump b { animation: bump 0.25s ease-out; }
 @keyframes bump { from { transform: scale(1.35); color: #ffb347; } to { transform: scale(1); } }
 
+/* ── 경험치 (하단 중앙) */
+.hud-bc { bottom: 18px; left: 50%; transform: translateX(-50%); width: min(520px, calc(100vw - 720px)); min-width: 260px; }
+.xp { display: flex; align-items: center; gap: 10px; padding: 6px 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 4px; }
+.xp-level { font-size: 11px; letter-spacing: 0.14em; color: var(--ink-dim); white-space: nowrap; }
+.xp-level b { font-size: 18px; color: #5ff6ff; letter-spacing: 0; font-variant-numeric: tabular-nums; }
+.xp-bar { flex: 1; height: 8px; background: rgba(95, 246, 255, 0.1); border-radius: 4px; overflow: hidden; }
+.xp-bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #1fb6d6, #5ff6ff); box-shadow: 0 0 8px rgba(95, 246, 255, 0.6); transition: width 0.15s; }
+.xp-text { font-size: 12px; color: var(--ink-dim); white-space: nowrap; font-variant-numeric: tabular-nums; min-width: 84px; text-align: right; }
+
+/* ── 보유 강화 아이콘 (체력 아래) */
+.upgrade-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px; max-width: 266px; }
+.upgrade-list li {
+  position: relative; width: 30px; height: 30px; display: grid; place-items: center;
+  font-size: 16px; color: #fff; background: var(--panel); border: 1px solid var(--rc, var(--line)); border-radius: 4px;
+}
+.upgrade-list li b { position: absolute; right: -3px; bottom: -4px; font-size: 10px; padding: 0 3px; background: #111; border-radius: 3px; color: var(--ink); }
+
+/* ── 레벨업 화면 */
+.screen-levelup { background: radial-gradient(ellipse at center, rgba(10, 30, 36, 0.55), rgba(0, 0, 0, 0.82)); }
+.levelup { width: min(900px, calc(100vw - 32px)); text-align: center; }
+.lv-title { margin: 0; font-size: clamp(34px, 6vw, 54px); font-weight: 800; letter-spacing: 0.14em; color: #5ff6ff; text-shadow: 0 0 24px rgba(95, 246, 255, 0.5); }
+.lv-sub { margin: 4px 0 22px; color: var(--ink-dim); }
+.lv-sub b { color: var(--ink); font-size: 18px; }
+.cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.card {
+  --rc: #9aa0a6;
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 20px 16px 18px;
+  font: inherit; color: var(--ink); text-align: center; cursor: pointer;
+  background: linear-gradient(180deg, rgba(30, 32, 34, 0.96), rgba(16, 17, 18, 0.96));
+  border: 1px solid var(--line); border-top: 3px solid var(--rc); border-radius: 6px;
+  transition: transform 0.12s, border-color 0.12s, box-shadow 0.12s;
+}
+.card:hover, .card:focus-visible { transform: translateY(-4px); border-color: var(--rc); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--rc); outline: none; }
+.card .key { position: absolute; top: 8px; left: 10px; font-size: 12px; color: var(--ink-dim); }
+.card .rarity { position: absolute; top: 8px; right: 10px; font-size: 11px; font-weight: 700; letter-spacing: 0.1em; color: var(--rc); }
+.card .icon { width: 58px; height: 58px; display: grid; place-items: center; font-size: 30px; border-radius: 50%; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--rc); color: #fff; margin-top: 8px; }
+.card .name { font-size: 19px; font-weight: 800; }
+.card .lvl { font-size: 12px; color: var(--ink-dim); font-variant-numeric: tabular-nums; }
+.card .lvl b { color: var(--rc); }
+.card .desc { margin: 0; font-size: 13px; line-height: 1.5; color: var(--ink-dim); min-height: 2.6em; }
+.card .effect { font-size: 14px; font-weight: 700; color: #5ff6ff; font-variant-numeric: tabular-nums; }
+.card .effect s { color: var(--ink-dim); font-weight: 400; text-decoration: none; }
+.card.chosen { transform: translateY(-8px) scale(1.04); box-shadow: 0 0 0 2px var(--rc), 0 0 40px var(--rc); }
+.cards.locked .card:not(.chosen) { opacity: 0.35; transform: none; box-shadow: none; }
+.cards.arming .card { animation: cardin 0.45s ease-out both; pointer-events: none; }
+.cards.arming .card:nth-child(2) { animation-delay: 0.05s; }
+.cards.arming .card:nth-child(3) { animation-delay: 0.1s; }
+@keyframes cardin { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .cards.arming .card { animation: none; } }
+.lv-hint { margin-top: 18px; font-size: 13px; color: var(--ink-dim); }
+@media (max-width: 720px) { .cards { grid-template-columns: 1fr; } }
+.result.result-sub { grid-template-columns: repeat(2, 1fr); margin-top: 0; }
+.result.result-sub dd { font-size: 22px; }
+
 /* ── 웨이브 전환 알림 (화면 중앙) */
 .wave-banner {
   position: absolute; left: 50%; top: 30%; transform: translate(-50%, -50%);
@@ -203,6 +257,8 @@ kbd.wide { min-width: 0; }
 .ch-hit i:nth-child(4) { transform: rotate(315deg) translate(-11px); }
 .crosshair.hit .ch-hit { opacity: 1; transition: none; }
 .crosshair.kill .ch-hit i { background: #fff; width: 12px; }
+.crosshair.crit .ch-hit i { background: #ffd23a; width: 13px; height: 3px; }
+#app:has(#screen-levelup:not([hidden])) .crosshair { display: none; }
 
 /* ── 화면 (시작 · 일시정지 · 오류) */
 .screen {

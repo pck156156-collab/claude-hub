@@ -109,6 +109,8 @@ export interface ZombieStats {
   spawnTime: number;
   /** 사망 후 시체가 남는 시간 → 이후 가라앉아 제거 */
   corpseTime: number;
+  /** 처치 시 떨어뜨리는 경험치 */
+  xp: number;
   appearance: { scale: number; hunch: number; skin: number[]; shirts: number[]; pants: number[] };
 }
 
@@ -130,6 +132,7 @@ export const ZOMBIE_TYPES: Record<string, ZombieStats> = {
     turnSpeed: 5,
     spawnTime: 1.0,
     corpseTime: 3.5,
+    xp: 10,
     appearance: {
       scale: 1,
       hunch: 0.38,
@@ -208,6 +211,39 @@ export function waveParams(wave: number): WaveParams {
     healthMultiplier: Math.min(l.maxHealthMultiplier, +(last.healthMultiplier + a.healthStep * n).toFixed(2)),
     speedMultiplier: Math.min(l.maxSpeedMultiplier, +(last.speedMultiplier + a.speedStep * n).toFixed(2)),
   };
+}
+
+/** 경험치 · 레벨 · 강화 */
+export const PROGRESSION_CONFIG = {
+  /** 레벨 n → n+1 필요 경험치 (레벨 1~5) */
+  xpTable: [30, 45, 65, 90, 120],
+  /** 레벨 6 이후: 120 + 40·k + 4·k² (k = 레벨 - 5) → 164, 216, 276, 344, 420 ... */
+  xpLinear: 40,
+  xpQuadratic: 4,
+  /** 기본 경험치 획득 범위 (플레이어 중심 반경) */
+  pickupRadius: 2.5,
+  /** 결정이 끌려오는 최고 속도 (단위/초) */
+  absorbSpeed: 12,
+  /** 끌려올 때 가속 (단위/초²) */
+  absorbAcceleration: 40,
+  /** 이 거리 안에 들어오면 획득 */
+  collectDistance: 0.55,
+  /** 동시에 존재할 수 있는 결정 수. 넘으면 가까운 결정과 병합 (경험치 손실 없음) */
+  maxOrbs: 160,
+  /** 새 결정이 이 거리 안의 결정과 합쳐짐 */
+  mergeRadius: 1.2,
+  /** 치명타 피해 배율 */
+  critMultiplier: 2,
+  /** 레벨업 카드 수 */
+  choices: 3,
+};
+
+/** 레벨 → 다음 레벨까지 필요 경험치 (밸런스 조정용으로 분리) */
+export function xpToNextLevel(level: number): number {
+  const t = PROGRESSION_CONFIG.xpTable;
+  if (level <= t.length) return t[Math.max(0, level - 1)];
+  const k = level - t.length;
+  return Math.round(t[t.length - 1] + PROGRESSION_CONFIG.xpLinear * k + PROGRESSION_CONFIG.xpQuadratic * k * k);
 }
 
 /** 경로 탐색 (격자 + 흐름장) */

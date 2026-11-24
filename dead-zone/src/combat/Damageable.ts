@@ -59,14 +59,15 @@ export class DamageableRegistry {
     return this.items.length;
   }
 
-  /** 선분이 높이 y 에서 처음 맞히는 대상 */
-  raycast(x0: number, z0: number, x1: number, z1: number, y: number): DamageableHit | null {
+  /** 선분이 높이 y 에서 처음 맞히는 대상. exclude 에 있는 대상은 무시 (관통 탄이 이미 맞힌 대상) */
+  raycast(x0: number, z0: number, x1: number, z1: number, y: number, exclude?: readonly Damageable[]): DamageableHit | null {
     let best: DamageableHit | null = null;
     let bestT = Infinity;
     const dx = x1 - x0;
     const dz = z1 - z0;
     for (const d of this.items) {
       if (!d.canBeHit()) continue;
+      if (exclude && exclude.length && exclude.includes(d)) continue;
       const s = d.hitShape;
       if (y < s.yMin || y > s.yMax) continue;
       const t = segmentCircle(x0, z0, dx, dz, s.x, s.z, s.radius);

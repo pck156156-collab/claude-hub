@@ -28,6 +28,7 @@
             <div class="health-label"><span>체력</span><b id="hp-text">100 / 100</b></div>
             <div class="bar"><div id="hp-fill" class="bar-fill"></div></div>
           </div>
+          <ul class="upgrade-list" id="upgrade-list" aria-label="보유 강화"></ul>
         </section>
 
         <section class="hud-br">
@@ -37,6 +38,14 @@
           </div>
           <div class="ammo-pips" id="ammo-pips"></div>
           <div class="reload-hint" id="reload-hint"></div>
+        </section>
+
+        <section class="hud-bc">
+          <div class="xp">
+            <span class="xp-level">LV <b id="xp-level">1</b></span>
+            <div class="xp-bar"><i id="xp-fill"></i></div>
+            <span class="xp-text" id="xp-text">0 / 30 XP</span>
+          </div>
         </section>
 
         <section class="hud-bl">
@@ -91,6 +100,15 @@
         </div>
       </div>
 
+      <div id="screen-levelup" class="screen screen-levelup" hidden>
+        <div class="levelup">
+          <p class="lv-title">LEVEL UP!</p>
+          <p class="lv-sub">레벨 <b id="lv-level">2</b> · 강화를 하나 선택하세요<span id="lv-more"></span></p>
+          <div class="cards" id="lv-cards"></div>
+          <p class="lv-hint">카드를 클릭하거나 <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> 키로 선택</p>
+        </div>
+      </div>
+
       <div id="screen-gameover" class="screen screen-gameover" hidden>
         <div class="panel">
           <p class="kicker">YOU DIED</p>
@@ -99,6 +117,10 @@
             <div><dt>생존 시간</dt><dd id="go-time">00:00</dd><em id="go-time-new" hidden>NEW</em></div>
             <div><dt>도달 웨이브</dt><dd id="go-wave">1</dd><em id="go-wave-new" hidden>NEW</em></div>
             <div><dt>처치한 좀비</dt><dd id="go-kills">0</dd><em id="go-kills-new" hidden>NEW</em></div>
+          </dl>
+          <dl class="result result-sub">
+            <div><dt>최종 레벨</dt><dd id="go-level">1</dd></div>
+            <div><dt>획득한 강화</dt><dd id="go-upgrades">0종</dd></div>
           </dl>
           <p class="best" id="go-best">최고 기록 — 생존 00:00 · 웨이브 1 · 처치 0</p>
           <button id="btn-restart" type="button" class="btn">다시 시작</button>

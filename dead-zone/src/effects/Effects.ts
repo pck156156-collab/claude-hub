@@ -138,6 +138,18 @@ export class Effects {
     }
   }
 
+  /** 치명타: 노란 불꽃 */
+  critSpark(point: THREE.Vector3): void {
+    for (let i = 0; i < 10; i++) {
+      const v = randomHemisphere(new THREE.Vector3(0, 1, 0), 1);
+      const sp = 3 + Math.random() * 4;
+      this.sparks.spawn({
+        x: point.x, y: point.y + 0.1, z: point.z, vx: v.x * sp, vy: v.y * sp, vz: v.z * sp,
+        life: 0.22, size: 1, endScale: 0.2, drag: 3, gravity: 6, stretch: 0.03, shape: [0.04, 0.04, 0.07], color: tmpColor.setRGB(1.8, 1.4, 0.2),
+      });
+    }
+  }
+
   /** 좀비 사망: 쓰러지는 자리 먼지 */
   zombieDeath(center: THREE.Vector3): void {
     for (let i = 0; i < 6; i++) {

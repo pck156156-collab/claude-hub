@@ -43,6 +43,10 @@ export class GameUI {
   private readonly waveProgress = $('wave-progress');
   private readonly banner = $('wave-banner');
   private readonly bannerNum = $('wb-num');
+  private readonly xpLevel = $('xp-level');
+  private readonly xpFill = $('xp-fill');
+  private readonly xpText = $('xp-text');
+  private readonly upgradeList = $('upgrade-list');
   private readonly pauseReason = $('pause-reason');
   private readonly last: Partial<Record<string, unknown>> = {};
   private pipEls: HTMLElement[] = [];
@@ -73,6 +77,7 @@ export class GameUI {
   }
 
   showScreen(name: 'start' | 'pause' | 'gameover' | 'error' | null, reason = ''): void {
+    // 레벨업 화면은 LevelUpScreen 이 따로 관리
     for (const [k, el] of Object.entries(this.screens)) el.hidden = k !== name;
     this.app.classList.toggle('playing', name === null);
     if (name === 'pause') this.pauseReason.textContent = reason;
@@ -101,6 +106,32 @@ export class GameUI {
     this.set('waveProgress', progress, (v) => (this.waveProgress.style.width = `${v}%`));
   }
 
+  /** 레벨 · 경험치 게이지 */
+  setXp(level: number, xp: number, required: number): void {
+    this.set('xpLevel', level, (v) => (this.xpLevel.textContent = String(v)));
+    this.set('xpText', `${xp}/${required}`, () => {
+      this.xpText.textContent = `${xp} / ${required} XP`;
+      this.xpFill.style.width = `${Math.min(100, (100 * xp) / required)}%`;
+    });
+  }
+
+  /** 보유 강화 아이콘 목록 (아이콘 · 레벨 · 희귀도 색) */
+  setUpgrades(items: { icon: string; name: string; level: number; color: string; label: string }[]): void {
+    const key = items.map((i) => `${i.name}${i.level}`).join('|');
+    this.set('upgrades', key, () => {
+      this.upgradeList.replaceChildren(...items.map((i) => {
+        const li = document.createElement('li');
+        li.style.setProperty('--rc', i.color);
+        li.title = `${i.name} Lv ${i.level} — ${i.label}`;
+        li.textContent = i.icon;
+        const b = document.createElement('b');
+        b.textContent = String(i.level);
+        li.appendChild(b);
+        return li;
+      }));
+    });
+  }
+
   /** 화면 중앙 "WAVE n / SURVIVE!" 알림 (CSS 애니메이션으로 나타났다 사라짐) */
   showWaveBanner(wave: number): void {
     this.bannerNum.textContent = String(wave);
@@ -111,7 +142,9 @@ export class GameUI {
     this.banner.classList.remove('show');
   }
 
-  showGameOver(run: RecordSet, rec: RecordResult): void {
+  showGameOver(run: RecordSet, rec: RecordResult, extra: { level: number; upgrades: number }): void {
+    $('go-level').textContent = String(extra.level);
+    $('go-upgrades').textContent = `${extra.upgrades}종`;
     $('go-time').textContent = formatTime(run.time);
     $('go-wave').textContent = String(run.wave);
     $('go-kills').textContent = String(run.kills);
@@ -133,10 +166,11 @@ export class GameUI {
   }
 
   /** 피격 표시 (명중 · 파괴) */
-  flashHit(kill: boolean): void {
-    this.hitTimer = kill ? 0.3 : 0.12;
+  flashHit(kill: boolean, crit = false): void {
+    this.hitTimer = kill ? 0.3 : crit ? 0.18 : 0.12;
     this.crosshair.classList.add('hit');
     this.crosshair.classList.toggle('kill', kill);
+    this.crosshair.classList.toggle('crit', crit);
   }
 
   /**
@@ -152,7 +186,7 @@ export class GameUI {
     this.set('spread', Math.round(s.spread * 8), (v) => this.crosshair.style.setProperty('--spread', `${v}px`));
     if (this.hitTimer > 0) {
       this.hitTimer -= dt;
-      if (this.hitTimer <= 0) this.crosshair.classList.remove('hit', 'kill');
+      if (this.hitTimer <= 0) this.crosshair.classList.remove('hit', 'kill', 'crit');
     }
 
     this.set('hp', `${s.health}/${s.maxHealth}`, () => {

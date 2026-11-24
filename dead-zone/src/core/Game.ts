@@ -15,11 +15,18 @@ import { ProjectileSystem } from '../weapons/Projectile';
 import { Weapon } from '../weapons/Weapon';
 import { World } from '../world/World';
 import { WaveSystem, formatTime } from '../waves/WaveSystem';
+import { ExperienceOrbs } from '../items/ExperienceOrb';
+import { ExperienceSystem } from '../progression/ExperienceSystem';
+import { PlayerStats } from '../upgrades/StatCalculator';
+import { RARITY_INFO, UPGRADES, UpgradeContext } from '../upgrades/UpgradeData';
+import { UpgradeManager } from '../upgrades/UpgradeManager';
+import { LevelUpScreen } from '../ui/LevelUpScreen';
 import { AudioManager } from './AudioManager';
 import { RecordResult, RecordSet, Records } from './Records';
 import { InputManager } from './InputManager';
 
-type State = 'start' | 'playing' | 'paused' | 'gameover' | 'error';
+/** levelup: 강화 선택 중 (게임 로직 정지, 렌더 · UI 입력만 유지). gameover 가 항상 우선 */
+type State = 'start' | 'playing' | 'paused' | 'levelup' | 'gameover' | 'error';
 
 /**
  * 게임 전체를 조립하고 루프를 돌린다.
@@ -61,6 +68,16 @@ export class Game {
   private readonly cleanups: (() => void)[] = [];
   /** 생존 시간 · 웨이브 진행 */
   readonly waves = new WaveSystem();
+  /** 경험치 · 레벨 */
+  readonly experience = new ExperienceSystem();
+  /** 강화 레벨 · 능력치 */
+  readonly upgrades = new UpgradeManager();
+  readonly orbs: ExperienceOrbs;
+  readonly levelUp = new LevelUpScreen();
+  /** 크리티컬 판정용 난수 (테스트에서 고정 가능) */
+  critRandom: () => number = Math.random;
+  /** 누적 치명타 수 (디버그 · 테스트) */
+  critHits = 0;
   /** 개인 최고 기록 (localStorage) */
   readonly records = new Records();
   /** 첫 판이 시작되었는지 (시작 화면에서 처음 누를 때만 판을 새로 시작) */
@@ -98,7 +115,9 @@ export class Game {
 
     this.zombies = new ZombieManager(this.world.collision, this.registry, this.player);
     this.zombieRenderer = new ZombieRenderer(this.scene, ZOMBIE_TYPES.walker.appearance);
+    this.orbs = new ExperienceOrbs(this.scene);
     this.wireEvents();
+    this.upgrades.reset(); // 기본 능력치를 각 시스템에 적용
     this.gpuName = detectGpu(this.renderer);
     this.setQuality(loadQuality());
     this.gameCamera.snap(this.player.position);
@@ -174,16 +193,22 @@ export class Game {
         this.weapon.update(step, this.controller.fire);
         this.projectiles.step(step);
         this.zombies.step(step, this.time, this.gameCamera.camera);
+        // 경험치 결정 흡수 → 경험치 (레벨업은 아래에서 상태 전환)
+        this.orbs.step(step, this.player.position.x, this.player.position.z, this.upgrades.stats.pickupRadius, (v) => this.experience.collect(v));
         this.time += step;
         if (this.state === 'playing') this.waves.step(step); // 이 스텝에 죽었으면 시간 정지
         this.accumulator -= step;
+        // 레벨업: 게임 오버가 아닐 때만. 이후 스텝은 멈춘다 (while 조건)
+        if (this.state === 'playing' && this.experience.levels.pending > 0 && !this.player.dead) this.enterLevelUp();
       }
       alpha = this.state === 'playing' ? this.accumulator / step : 1;
     } else if (this.state === 'gameover') {
       // 로직(이동 · 사격 · 좀비 AI · 생성)은 멈추고, 쓰러지는 연출만 진행
       if (this.gameOverDelay > 0) {
         this.gameOverDelay -= dt;
-        if (this.gameOverDelay <= 0 && this.lastRun) this.ui.showGameOver(this.lastRun.run, this.lastRun.result);
+        if (this.gameOverDelay <= 0 && this.lastRun) {
+          this.ui.showGameOver(this.lastRun.run, this.lastRun.result, { level: this.experience.levels.level, upgrades: this.upgrades.ownedCount });
+        }
       }
     }
     const animate = this.state === 'playing' || this.state === 'gameover';
@@ -201,6 +226,12 @@ export class Game {
 
   /** 다시 시작: 페이지 새로고침 없이 이번 판 상태를 모두 초기화 */
   restart(): void {
+    // 강화 · 경험치 먼저 초기화 → 기본 능력치(최대 체력 100 등) 복원 뒤 부활
+    this.levelUp.hide();
+    this.upgrades.reset();
+    this.experience.reset();
+    this.orbs.reset();
+    this.critHits = 0;
     this.player.revive(this.world.spawnPoint);
     this.model.setDead(false);
     this.weapon.reset();
@@ -218,6 +249,69 @@ export class Game {
     this.beginPlay();
     // 다음 프레임을 기다리지 않고 HUD 를 바로 초기 상태로
     this.ui.setWaveStatus(this.waves.wave, this.waves.time, this.zombies.aliveCount);
+    const lv = this.experience.levels;
+    this.ui.setXp(lv.level, lv.xp, lv.required);
+    this.ui.setUpgrades(this.upgradeSummary());
+  }
+
+  /** 레벨업 시작: 로직 정지 + 강화 카드 3장 */
+  private enterLevelUp(): void {
+    this.state = 'levelup';
+    this.input.reset();
+    this.weapon.releaseTrigger();
+    this.accumulator = 0;
+    this.ui.hideWaveBanner();
+    this.showLevelUpChoices();
+  }
+
+  private showLevelUpChoices(): void {
+    const lv = this.experience.levels;
+    const choices = this.upgrades.rollChoices(this.upgradeContext());
+    if (choices.length === 0) {
+      // 고를 수 있는 강화가 하나도 없으면 (모두 최대) 기회를 소모하고 진행
+      lv.pending = 0;
+      this.resumeFromLevelUp();
+      return;
+    }
+    // 이번 선택이 몇 레벨 달성분인지 (연속 레벨업이면 앞 레벨부터 차례로)
+    this.levelUp.show(lv.level - lv.pending + 1, choices, lv.pending - 1);
+  }
+
+  /** 카드 선택 확정 (화면 · 키 입력 공통). 선택마다 한 번만 호출된다 */
+  chooseUpgrade(id: string): void {
+    if (this.state !== 'levelup') return;
+    this.upgrades.apply(id);
+    const lv = this.experience.levels;
+    lv.pending = Math.max(0, lv.pending - 1);
+    if (lv.pending > 0 && !this.player.dead) this.showLevelUpChoices();
+    else this.resumeFromLevelUp();
+  }
+
+  private resumeFromLevelUp(): void {
+    this.levelUp.hide();
+    this.setState('playing');
+  }
+
+  private upgradeContext(): UpgradeContext {
+    return { health: this.player.health, maxHealth: this.player.maxHealth, level: (id) => this.upgrades.level(id) };
+  }
+
+  /** 강화 능력치 → 실제 시스템에 반영 (기본값은 각 설정에 보존, 여기서는 현재값만 덮어씀) */
+  private applyStats(st: PlayerStats): void {
+    this.weapon.applyStats({ damage: st.damage, fireRate: st.fireRate, magazineSize: st.magazineSize, reloadTime: st.reloadTime, pierce: st.pierce });
+    this.player.moveSpeed = st.moveSpeed;
+    this.player.setMaxHealth(st.maxHealth);
+    this.player.damageReduction = st.damageReduction;
+    this.experience.multiplier = st.xpMultiplier;
+  }
+
+  private upgradeSummary(): { icon: string; name: string; level: number; color: string; label: string }[] {
+    const out = [];
+    for (const u of UPGRADES) {
+      const l = this.upgrades.level(u.id);
+      if (l > 0) out.push({ icon: u.icon, name: u.name, level: l, color: RARITY_INFO[u.rarity].color, label: u.format(l) });
+    }
+    return out;
   }
 
   pause(reason: string): void {
@@ -326,11 +420,16 @@ export class Game {
         h.point.copy(e.point);
         h.direction.copy(e.direction);
         h.sourceId = e.sourceId;
+        // 치명타: 명중마다 판정 (관통 탄은 대상마다 따로)
+        const st = this.upgrades.stats;
+        const crit = st.critChance > 0 && this.critRandom() < st.critChance;
+        if (crit) { h.damage *= st.critMultiplier; this.critHits++; }
         e.target.takeDamage(h);
         this.effects.impactFlesh(e.point, e.direction);
+        if (crit) this.effects.critSpark(e.point);
         if (e.target instanceof Zombie) this.zombies.notifyDamaged(e.target);
         if (e.target.canBeHit()) {
-          this.ui.flashHit(false);
+          this.ui.flashHit(false, crit);
           this.audio.hit();
         }
       } else {
@@ -348,6 +447,7 @@ export class Game {
 
     // 좀비 처치 · 플레이어 피격 · 사망
     this.zombies.onKilled = (z) => {
+      this.orbs.spawn(z.position.x, z.position.z, z.stats.xp);
       this.effects.zombieDeath(z.position);
       this.audio.bodyFall();
       this.ui.flashHit(true);
@@ -382,6 +482,16 @@ export class Game {
       if (this.state === 'playing') this.pause('ESC 키로 일시정지했습니다.');
     });
     this.input.onPress('F3', () => this.debug.toggle());
+    // 레벨업 카드: 숫자 1 · 2 · 3
+    ['Digit1', 'Digit2', 'Digit3', 'Numpad1', 'Numpad2', 'Numpad3'].forEach((code) => {
+      this.input.onPress(code, () => { if (this.state === 'levelup') this.levelUp.select(Number(code.slice(-1)) - 1); });
+    });
+    this.levelUp.onChoose = (choice) => this.chooseUpgrade(choice.def.id);
+    this.upgrades.onStatsChanged = (st) => this.applyStats(st);
+    this.upgrades.onInstantEffect = (def) => {
+      if (def.effect === 'heal') this.player.heal(def.value);
+      if (def.effect === 'maxHealth') this.player.heal(def.value); // 강인함: 최대 체력 +20 과 함께 20 회복
+    };
     this.input.onPress('KeyM', () => (this.audio.muted = !this.audio.muted));
 
     this.ui.onStart = () => this.beginPlay();
@@ -440,6 +550,10 @@ export class Game {
     this.effects.update(dt, this.gameCamera.camera);
 
     this.ui.setWaveStatus(this.waves.wave, this.waves.time, this.zombies.aliveCount);
+    const lv = this.experience.levels;
+    this.ui.setXp(lv.level, lv.xp, lv.required);
+    this.ui.setUpgrades(this.upgradeSummary());
+    this.orbs.render();
     this.spread *= Math.exp(-6 * dt);
     const w = this.weapon;
     this.ui.update(dt, {
@@ -467,6 +581,8 @@ export class Game {
       ['투사체', `${this.projectiles.activeCount} / 풀 ${this.projectiles.capacity}`],
       ['파티클', String(this.effects.particleCount)],
       ['체력', `${p.health}/${p.maxHealth}${p.invulnerable > 0 ? ' 무적' : ''} · 받은 피해 ${p.damageTaken} · 막힘 ${p.blockedHits}`],
+      ['레벨', `${this.experience.levels.level} · ${this.experience.levels.xp}/${this.experience.levels.required} XP · 대기 ${this.experience.levels.pending} · 결정 ${this.orbs.count}개(${this.orbs.totalValue}XP)`],
+      ['강화 능력치', (() => { const st = this.upgrades.stats; return `피해 ${st.damage.toFixed(1)} · 연사 ${st.fireRate.toFixed(1)} · 탄창 ${st.magazineSize} · 장전 ${st.reloadTime.toFixed(2)}s · 관통 ${st.pierce} · 치명 ${Math.round(st.critChance * 100)}%`; })()],
       ['웨이브', `${this.waves.wave} (${formatTime(this.waves.time)}) · 간격 ${this.zombies.difficulty.spawnInterval}s · 상한 ${this.zombies.difficulty.maxAlive} · 체력 ×${this.zombies.difficulty.healthMultiplier}`],
       ['좀비', `생존 ${this.zombies.aliveCount} · 시체 ${this.zombies.corpseCount} · 처치 ${this.zombies.kills} · 생성 ${this.zombies.spawned}`],
       ['AI 시간', `${this.zombies.aiMs.toFixed(3)}ms / 스텝 · 경로 ${this.zombies.nav.lastBuildMs.toFixed(2)}ms (${this.zombies.nav.builds}회)`],
