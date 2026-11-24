@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CAMERA_CONFIG, RENDER_CONFIG, SIMULATION, TARGET_CONFIG, WEAPON_CONFIG } from '../config/GameConfig';
+import { CAMERA_CONFIG, DEFAULT_QUALITY, QUALITY_PRESETS, QualityLevel, RENDER_CONFIG, SIMULATION, TARGET_CONFIG, WEAPON_CONFIG } from '../config/GameConfig';
 import { GameCamera } from '../camera/GameCamera';
 import { DamageableRegistry, HitInfo } from '../combat/Damageable';
 import { Effects } from '../effects/Effects';
@@ -80,6 +80,8 @@ export class Game {
 
     this.createTargets();
     this.wireEvents();
+    this.gpuName = detectGpu(this.renderer);
+    this.setQuality(loadQuality());
     this.gameCamera.snap(this.player.position);
     this.world.updateShadow(this.player.position);
     this.ui.showScreen('start');
@@ -107,6 +109,41 @@ export class Game {
 
   /** 한 프레임 진행 (테스트에서도 직접 호출 가능). draw=false 면 화면 그리기만 생략 */
   advance(frameDt: number, draw = true): void {
+    const t0 = performance.now();
+    this.step(frameDt, draw);
+    // CPU 가 한 프레임에 쓴 시간 (그리기 명령 제출 포함, GPU 실행 시간은 포함 안 됨)
+    this.cpuMs += (performance.now() - t0 - this.cpuMs) * 0.1;
+    this.debug.tick(frameDt, () => this.debugRows());
+    if (draw && this.state === 'playing') this.adaptResolution(frameDt);
+  }
+
+  quality: QualityLevel = DEFAULT_QUALITY;
+  private gpuName = '';
+  private cpuMs = 0;
+
+  /** 그래픽 품질 변경 (즉시 적용, 오브젝트 재생성 없음) */
+  setQuality(level: QualityLevel): void {
+    const q = QUALITY_PRESETS[level];
+    const shadowsBefore = this.renderer.shadowMap.enabled;
+    this.quality = level;
+    this.world.setQuality(q.shadowMapSize, q.streetLights);
+    this.renderer.shadowMap.enabled = q.shadowMapSize > 0;
+    if (shadowsBefore !== this.renderer.shadowMap.enabled) {
+      // 그림자 켜기/끄기는 셰이더가 바뀌므로 재질을 다시 컴파일
+      this.scene.traverse((o) => {
+        const m = (o as THREE.Mesh).material;
+        if (m) (Array.isArray(m) ? m : [m]).forEach((x) => (x.needsUpdate = true));
+      });
+    }
+    this.maxRatio = Math.min(window.devicePixelRatio, q.maxPixelRatio);
+    this.applyPixelRatio(this.maxRatio);
+    this.resLock = 0;
+    this.ui.setQuality(level);
+    try { localStorage.setItem(QUALITY_KEY, level); } catch { /* 저장 불가 환경 무시 */ }
+    if (this.state !== 'playing') this.renderFrame(0, 1);
+  }
+
+  private step(frameDt: number, draw: boolean): void {
     const dt = Math.min(frameDt, SIMULATION.maxFrameDelta);
     let alpha = 1;
     if (this.state === 'playing') {
@@ -124,8 +161,6 @@ export class Game {
       alpha = this.accumulator / step;
     }
     this.renderFrame(this.state === 'playing' ? dt : 0, alpha, draw);
-    this.debug.tick(frameDt, () => this.debugRows());
-    if (draw && this.state === 'playing') this.adaptResolution(frameDt);
   }
 
   beginPlay(): void {
@@ -153,9 +188,20 @@ export class Game {
 
   /** 현재 렌더 배율 (동적 해상도) */
   pixelRatio = Math.min(window.devicePixelRatio, RENDER_CONFIG.maxPixelRatio);
+  private maxRatio = this.pixelRatio;
   private perfTime = 0;
   private perfFrames = 0;
   private perfGood = 0;
+  /** 해상도를 낮춰도 FPS 가 안 오르면 (화면 크기가 병목이 아님) 한동안 낮추지 않는다 */
+  private resLock = 0;
+  private lastDrop: { from: number; fps: number } | null = null;
+  fps = 0;
+
+  private applyPixelRatio(r: number): void {
+    this.pixelRatio = r;
+    this.renderer.setPixelRatio(r);
+    this.renderer.setSize(window.innerWidth, window.innerHeight, false);
+  }
 
   /** 1초마다 평균 FPS 를 보고 렌더 배율을 조절한다 */
   private adaptResolution(frameDt: number): void {
@@ -165,23 +211,30 @@ export class Game {
     this.perfFrames++;
     if (this.perfTime < 1) return;
     const fps = this.perfFrames / this.perfTime;
+    this.fps = fps;
     this.perfTime = 0;
     this.perfFrames = 0;
-    const max = Math.min(window.devicePixelRatio, RENDER_CONFIG.maxPixelRatio);
-    let next = this.pixelRatio;
-    if (fps < d.lowFps && this.pixelRatio > d.minPixelRatio) {
-      next = Math.max(d.minPixelRatio, this.pixelRatio - d.step);
+    if (this.resLock > 0) this.resLock--;
+
+    // 직전에 낮춘 효과 확인: 8% 도 안 좋아졌으면 되돌리고 30초간 낮추지 않음
+    if (this.lastDrop) {
+      const drop = this.lastDrop;
+      this.lastDrop = null;
+      if (fps < drop.fps * 1.08) {
+        this.applyPixelRatio(drop.from);
+        this.resLock = 30;
+        return;
+      }
+    }
+    if (fps < d.lowFps && this.pixelRatio > d.minPixelRatio && this.resLock === 0) {
+      this.lastDrop = { from: this.pixelRatio, fps };
+      this.applyPixelRatio(Math.max(d.minPixelRatio, this.pixelRatio - d.step));
       this.perfGood = 0;
-    } else if (fps >= d.highFps && this.pixelRatio < max) {
+    } else if (fps >= d.highFps && this.pixelRatio < this.maxRatio) {
       // 올릴 때는 신중하게: 5초 연속 여유가 있을 때만
-      if (++this.perfGood >= 5) { next = Math.min(max, this.pixelRatio + d.step); this.perfGood = 0; }
+      if (++this.perfGood >= 5) { this.applyPixelRatio(Math.min(this.maxRatio, this.pixelRatio + d.step)); this.perfGood = 0; }
     } else {
       this.perfGood = 0;
-    }
-    if (next !== this.pixelRatio) {
-      this.pixelRatio = next;
-      this.renderer.setPixelRatio(next);
-      this.renderer.setSize(window.innerWidth, window.innerHeight, false);
     }
   }
 
@@ -268,11 +321,13 @@ export class Game {
 
     this.ui.onStart = () => this.beginPlay();
     this.ui.onResume = () => this.beginPlay();
+    this.ui.onQuality = (level) => this.setQuality(level);
 
     const onBlur = () => this.pause('게임 창이 포커스를 잃어 일시정지했습니다.');
     const onVisibility = () => { if (document.hidden) this.pause('탭이 숨겨져 일시정지했습니다.'); };
     const onResize = () => {
-      this.pixelRatio = Math.min(this.pixelRatio, window.devicePixelRatio, RENDER_CONFIG.maxPixelRatio);
+      this.maxRatio = Math.min(window.devicePixelRatio, QUALITY_PRESETS[this.quality].maxPixelRatio);
+      this.pixelRatio = Math.min(this.pixelRatio, this.maxRatio);
       this.renderer.setPixelRatio(this.pixelRatio);
       this.renderer.setSize(window.innerWidth, window.innerHeight, false);
       this.gameCamera.resize(window.innerWidth / window.innerHeight);
@@ -333,6 +388,9 @@ export class Game {
     const info = this.renderer.info;
     return [
       ['FPS', `${this.debug.fps.toFixed(0)} (${this.debug.frameMs.toFixed(1)}ms, 최악 ${this.debug.worstMs.toFixed(0)}ms)`],
+      ['CPU 시간', `${this.cpuMs.toFixed(2)}ms / 프레임`],
+      ['그래픽', `${QUALITY_PRESETS[this.quality].label} · 그림자 ${this.renderer.shadowMap.enabled ? 'ON' : 'OFF'}${this.resLock ? ' · 해상도 고정' : ''}`],
+      ['GPU', this.gpuName],
       ['상태', this.state],
       ['위치', `${p.position.x.toFixed(2)}, ${p.position.z.toFixed(2)}`],
       ['속도', `${p.speed.toFixed(2)} / 벽 ${p.touchingWall ? '접촉' : '-'}`],
@@ -347,5 +405,27 @@ export class Game {
       ['삼각형', info.render.triangles.toLocaleString()],
       ['카메라', `${CAMERA_CONFIG.pitchDeg}° / ${CAMERA_CONFIG.distance}m`],
     ];
+  }
+}
+
+const QUALITY_KEY = 'project-dead-zone.quality';
+
+function loadQuality(): QualityLevel {
+  try {
+    const v = localStorage.getItem(QUALITY_KEY);
+    if (v && v in QUALITY_PRESETS) return v as QualityLevel;
+  } catch { /* 저장소 접근 불가 */ }
+  return DEFAULT_QUALITY;
+}
+
+/** 브라우저가 실제로 쓰는 그래픽 장치 이름 (소프트웨어 렌더링 여부 진단용) */
+function detectGpu(renderer: THREE.WebGLRenderer): string {
+  try {
+    const gl = renderer.getContext();
+    const ext = gl.getExtension('WEBGL_debug_renderer_info');
+    const name = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+    return String(name).replace(/^ANGLE \((.*)\)$/, '$1').slice(0, 48);
+  } catch {
+    return '알 수 없음';
   }
 }

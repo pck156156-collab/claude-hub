@@ -355,6 +355,18 @@ export class World {
 
   private streetLights: THREE.PointLight[] = [];
 
+  /** 그래픽 품질 적용: 그림자 해상도(0 = 끔) · 가로등 점광원 수. 오브젝트는 다시 만들지 않는다 */
+  setQuality(shadowMapSize: number, streetLights: number): void {
+    const enabled = shadowMapSize > 0;
+    this.sun.castShadow = enabled;
+    if (enabled && this.sun.shadow.mapSize.x !== shadowMapSize) {
+      this.sun.shadow.mapSize.set(shadowMapSize, shadowMapSize);
+      this.sun.shadow.map?.dispose();
+      this.sun.shadow.map = null;
+    }
+    this.streetLights.forEach((l, i) => (l.visible = i < streetLights));
+  }
+
   private buildStreetFurniture(): void {
     // 도로를 따라 양쪽 보도에 가로등. 일부는 꺼지거나 기울어짐
     const states: ('on' | 'off' | 'broken')[] = ['on', 'off', 'broken', 'on', 'off', 'off', 'on', 'broken'];

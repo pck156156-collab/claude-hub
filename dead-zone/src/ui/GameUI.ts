@@ -1,3 +1,5 @@
+import { QUALITY_PRESETS, QualityLevel } from '../config/GameConfig';
+
 /**
  * DOM 기반 HUD: 체력 · 탄약 · 무기 이름 · 조준 커서 · 화면 전환.
  * 값이 바뀔 때만 DOM 을 갱신해 불필요한 레이아웃 계산을 피한다.
@@ -35,11 +37,25 @@ export class GameUI {
   private hitTimer = 0;
 
   onStart: (() => void) | null = null;
+  onQuality: ((level: QualityLevel) => void) | null = null;
+  private readonly qualityButtons: HTMLButtonElement[] = [];
   onResume: (() => void) | null = null;
 
   constructor() {
     $('btn-start').addEventListener('click', () => this.onStart?.());
     $('btn-resume').addEventListener('click', () => this.onResume?.());
+    for (const group of document.querySelectorAll('.quality-group')) {
+      for (const [level, preset] of Object.entries(QUALITY_PRESETS)) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'q-btn';
+        b.dataset.quality = level;
+        b.textContent = preset.label;
+        b.addEventListener('click', () => this.onQuality?.(level as QualityLevel));
+        group.appendChild(b);
+        this.qualityButtons.push(b);
+      }
+    }
   }
 
   showScreen(name: 'start' | 'pause' | 'error' | null, reason = ''): void {
@@ -48,6 +64,10 @@ export class GameUI {
     if (name === 'pause') this.pauseReason.textContent = reason;
     if (name === 'start') $('btn-start').focus({ preventScroll: true });
     if (name === 'pause') $('btn-resume').focus({ preventScroll: true });
+  }
+
+  setQuality(level: QualityLevel): void {
+    for (const b of this.qualityButtons) b.setAttribute('aria-pressed', String(b.dataset.quality === level));
   }
 
   showError(text: string): void {

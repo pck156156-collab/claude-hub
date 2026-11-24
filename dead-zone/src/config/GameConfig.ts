@@ -112,6 +112,20 @@ export const EFFECTS_CONFIG = {
   recoilRecovery: 18,
 };
 
+/**
+ * 그래픽 품질 단계. 시작 화면 · 일시정지 화면에서 바꿀 수 있고 브라우저에 기억된다.
+ * - shadowMapSize: 0 이면 그림자 끔
+ * - streetLights: 가로등 점광원 수 (광원 하나마다 화면 전체 계산량 증가)
+ * - maxPixelRatio: 렌더 배율 상한 (픽셀 수 = 배율²)
+ */
+export const QUALITY_PRESETS = {
+  high: { label: '높음', shadowMapSize: 2048, streetLights: 3, maxPixelRatio: 1.5 },
+  medium: { label: '중간', shadowMapSize: 1024, streetLights: 1, maxPixelRatio: 1.0 },
+  low: { label: '낮음', shadowMapSize: 0, streetLights: 0, maxPixelRatio: 0.85 },
+} as const;
+export type QualityLevel = keyof typeof QUALITY_PRESETS;
+export const DEFAULT_QUALITY: QualityLevel = 'medium';
+
 export const AUDIO_CONFIG = {
   masterVolume: 0.35,
 };
