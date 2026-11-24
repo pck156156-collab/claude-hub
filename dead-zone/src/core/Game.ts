@@ -14,7 +14,9 @@ import { GameUI } from '../ui/GameUI';
 import { ProjectileSystem } from '../weapons/Projectile';
 import { Weapon } from '../weapons/Weapon';
 import { World } from '../world/World';
+import { WaveSystem, formatTime } from '../waves/WaveSystem';
 import { AudioManager } from './AudioManager';
+import { RecordResult, RecordSet, Records } from './Records';
 import { InputManager } from './InputManager';
 
 type State = 'start' | 'playing' | 'paused' | 'gameover' | 'error';
@@ -57,8 +59,17 @@ export class Game {
   private readonly eject = new THREE.Vector3();
   private readonly hitInfo: HitInfo = { damage: 0, point: new THREE.Vector3(), direction: new THREE.Vector3(), sourceId: '' };
   private readonly cleanups: (() => void)[] = [];
-  /** 이번 판 생존 시간 (게임 오버 화면) */
-  playTime = 0;
+  /** 생존 시간 · 웨이브 진행 */
+  readonly waves = new WaveSystem();
+  /** 개인 최고 기록 (localStorage) */
+  readonly records = new Records();
+  /** 첫 판이 시작되었는지 (시작 화면에서 처음 누를 때만 판을 새로 시작) */
+  private runStarted = false;
+  private lastRun: { run: RecordSet; result: RecordResult } | null = null;
+  /** 이번 판 생존 시간 (WaveSystem 기준, 실제 진행된 게임 시간만) */
+  get playTime(): number {
+    return this.waves.time;
+  }
   /** 사망 후 게임 오버 화면을 띄우기까지 남은 시간 (쓰러지는 동작을 보여 줌) */
   private gameOverDelay = 0;
 
@@ -164,7 +175,7 @@ export class Game {
         this.projectiles.step(step);
         this.zombies.step(step, this.time, this.gameCamera.camera);
         this.time += step;
-        this.playTime += step;
+        if (this.state === 'playing') this.waves.step(step); // 이 스텝에 죽었으면 시간 정지
         this.accumulator -= step;
       }
       alpha = this.state === 'playing' ? this.accumulator / step : 1;
@@ -172,7 +183,7 @@ export class Game {
       // 로직(이동 · 사격 · 좀비 AI · 생성)은 멈추고, 쓰러지는 연출만 진행
       if (this.gameOverDelay > 0) {
         this.gameOverDelay -= dt;
-        if (this.gameOverDelay <= 0) this.ui.showGameOver(this.zombies.kills, this.playTime);
+        if (this.gameOverDelay <= 0 && this.lastRun) this.ui.showGameOver(this.lastRun.run, this.lastRun.result);
       }
     }
     const animate = this.state === 'playing' || this.state === 'gameover';
@@ -182,6 +193,10 @@ export class Game {
   beginPlay(): void {
     this.audio.unlock();
     this.setState('playing');
+    if (!this.runStarted) {
+      this.runStarted = true;
+      this.waves.reset(); // 웨이브 1 알림 + 난이도 적용
+    }
   }
 
   /** 다시 시작: 페이지 새로고침 없이 이번 판 상태를 모두 초기화 */
@@ -193,13 +208,16 @@ export class Game {
     this.effects.clear();
     this.zombies.reset();
     this.time = 0;
-    this.playTime = 0;
     this.lastShotTime = -10;
+    this.lastRun = null;
     this.spread = 0;
     this.gameOverDelay = 0;
     this.ui.setKills(0);
     this.gameCamera.snap(this.player.position);
+    this.runStarted = false; // beginPlay 에서 웨이브 1 부터 다시
     this.beginPlay();
+    // 다음 프레임을 기다리지 않고 HUD 를 바로 초기 상태로
+    this.ui.setWaveStatus(this.waves.wave, this.waves.time, this.zombies.aliveCount);
   }
 
   pause(reason: string): void {
@@ -346,7 +364,16 @@ export class Game {
       this.weapon.releaseTrigger();
       this.model.setDead(true);
       this.gameOverDelay = 1.3;
+      // 결과 확정 (시간은 이 순간 멈춤) + 최고 기록 저장
+      const run: RecordSet = { time: this.waves.time, wave: this.waves.wave, kills: this.zombies.kills };
+      this.lastRun = { run, result: this.records.submit(run) };
+      this.ui.hideWaveBanner();
       this.ui.showScreen(null);
+    };
+
+    this.waves.onWaveStart = (params) => {
+      this.zombies.setDifficulty(params);
+      this.ui.showWaveBanner(params.wave);
     };
 
     this.input.onPointerMove = (x, y) => this.ui.moveCursor(x, y);
@@ -412,6 +439,7 @@ export class Game {
     this.zombieRenderer.update(dt, this.zombies.zombies, alpha, this.gameCamera.camera);
     this.effects.update(dt, this.gameCamera.camera);
 
+    this.ui.setWaveStatus(this.waves.wave, this.waves.time, this.zombies.aliveCount);
     this.spread *= Math.exp(-6 * dt);
     const w = this.weapon;
     this.ui.update(dt, {
@@ -439,6 +467,7 @@ export class Game {
       ['투사체', `${this.projectiles.activeCount} / 풀 ${this.projectiles.capacity}`],
       ['파티클', String(this.effects.particleCount)],
       ['체력', `${p.health}/${p.maxHealth}${p.invulnerable > 0 ? ' 무적' : ''} · 받은 피해 ${p.damageTaken} · 막힘 ${p.blockedHits}`],
+      ['웨이브', `${this.waves.wave} (${formatTime(this.waves.time)}) · 간격 ${this.zombies.difficulty.spawnInterval}s · 상한 ${this.zombies.difficulty.maxAlive} · 체력 ×${this.zombies.difficulty.healthMultiplier}`],
       ['좀비', `생존 ${this.zombies.aliveCount} · 시체 ${this.zombies.corpseCount} · 처치 ${this.zombies.kills} · 생성 ${this.zombies.spawned}`],
       ['AI 시간', `${this.zombies.aiMs.toFixed(3)}ms / 스텝 · 경로 ${this.zombies.nav.lastBuildMs.toFixed(2)}ms (${this.zombies.nav.builds}회)`],
       ['렌더 배율', `${this.pixelRatio.toFixed(2)} (${this.renderer.domElement.width}×${this.renderer.domElement.height})`],

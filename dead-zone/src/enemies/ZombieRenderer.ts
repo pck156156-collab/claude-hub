@@ -1,9 +1,10 @@
 import * as THREE from 'three';
-import { SPAWN_CONFIG } from '../config/GameConfig';
+import { SPAWN_CONFIG, WAVE_CONFIG } from '../config/GameConfig';
 import { clamp, damp, wrapAngle } from '../core/random';
 import { Zombie, ZombieState } from './Zombie';
 
-const MAX = SPAWN_CONFIG.maxAlive + SPAWN_CONFIG.maxCorpses + 2;
+/** 동시에 그릴 수 있는 최대 좀비 수: 웨이브 상한 + 시체 */
+const MAX = WAVE_CONFIG.limits.maxAlive + SPAWN_CONFIG.maxCorpses + 2;
 
 interface PartDef {
   key: string;

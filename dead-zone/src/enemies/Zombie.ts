@@ -16,6 +16,8 @@ export enum ZombieState {
 /** 좀비가 공격할 수 있는 대상 (플레이어). 향후 동료 · 바리케이드도 같은 형태로 추가 가능 */
 export interface AttackTarget {
   readonly position: THREE.Vector3;
+  /** 이동 속도 (생성 위치를 정할 때 진행 방향을 피하는 데 사용, 선택) */
+  readonly velocity?: THREE.Vector3;
   readonly radius: number;
   isAlive(): boolean;
   /** 실제로 피해가 들어갔으면 true (무적 시간 중이면 false) */

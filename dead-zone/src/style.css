@@ -90,16 +90,49 @@ kbd {
 }
 kbd.wide { min-width: 0; }
 
-/* ── 처치 수 (상단 중앙) */
-.hud-tc { top: 18px; left: 50%; transform: translateX(-50%); }
-.kills {
-  display: flex; align-items: baseline; gap: 10px; padding: 6px 16px;
+/* ── 웨이브 · 생존 시간 (상단 중앙) */
+.hud-tc { top: 16px; left: 50%; transform: translateX(-50%); text-align: center; }
+.wave-box {
+  display: flex; align-items: baseline; gap: 14px; padding: 6px 18px;
   background: var(--panel); border: 1px solid var(--line); border-radius: 4px;
-  font-size: 12px; letter-spacing: 0.12em; color: var(--ink-dim);
 }
-.kills b { font-size: 24px; color: var(--ink); font-variant-numeric: tabular-nums; letter-spacing: 0; }
+.wave-label { font-size: 12px; letter-spacing: 0.2em; color: var(--ink-dim); }
+.wave-label b { font-size: 22px; color: var(--accent); letter-spacing: 0.02em; margin-left: 4px; font-variant-numeric: tabular-nums; }
+.wave-time { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: 0.04em; }
+.wave-progress { height: 3px; margin-top: 4px; background: rgba(255, 255, 255, 0.08); border-radius: 2px; overflow: hidden; }
+.wave-progress i { display: block; height: 100%; width: 0; background: var(--accent); opacity: 0.8; }
+
+/* ── 처치 · 생존 좀비 (오른쪽 위) */
+.hud-tr { top: 18px; right: 24px; display: flex; gap: 8px; }
+.stat {
+  display: flex; flex-direction: column; align-items: flex-end; min-width: 76px; padding: 6px 12px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 4px;
+  font-size: 11px; letter-spacing: 0.1em; color: var(--ink-dim);
+}
+.stat b { font-size: 22px; color: var(--ink); font-variant-numeric: tabular-nums; letter-spacing: 0; line-height: 1.15; }
 .kills.bump b { animation: bump 0.25s ease-out; }
 @keyframes bump { from { transform: scale(1.35); color: #ffb347; } to { transform: scale(1); } }
+
+/* ── 웨이브 전환 알림 (화면 중앙) */
+.wave-banner {
+  position: absolute; left: 50%; top: 30%; transform: translate(-50%, -50%);
+  text-align: center; pointer-events: none; opacity: 0;
+  text-shadow: 0 4px 24px rgba(0, 0, 0, 0.85);
+}
+.wave-banner.show { animation: banner 2.6s ease-out forwards; }
+.wb-wave { font-size: clamp(40px, 7vw, 72px); font-weight: 800; letter-spacing: 0.16em; }
+.wb-wave span { color: var(--accent); }
+.wb-sub { margin-top: 4px; font-size: clamp(14px, 2vw, 20px); font-weight: 700; letter-spacing: 0.5em; color: #f0b03a; }
+@keyframes banner {
+  0% { opacity: 0; transform: translate(-50%, -40%) scale(1.15); }
+  12% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  75% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -58%) scale(0.98); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wave-banner.show { animation: bannerfade 2.6s linear forwards; }
+  @keyframes bannerfade { 0%, 80% { opacity: 1; transform: translate(-50%, -50%); } 100% { opacity: 0; transform: translate(-50%, -50%); } }
+}
 
 /* ── 체력 상태 */
 .health.hurt { animation: shake 0.3s; border-left-color: var(--accent); }
@@ -128,8 +161,10 @@ kbd.wide { min-width: 0; }
 /* ── 게임 오버 */
 .screen-gameover { background: radial-gradient(ellipse at center, rgba(60, 0, 0, 0.45), rgba(0, 0, 0, 0.88)); }
 .gameover-title { color: var(--accent); font-size: clamp(30px, 6vw, 44px); }
-.result { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 8px 0 24px; }
-.result div { padding: 12px; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--line); border-radius: 4px; }
+.result { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 8px 0 12px; }
+.result div { position: relative; padding: 12px 8px; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--line); border-radius: 4px; }
+.result em { position: absolute; top: -8px; right: 6px; padding: 1px 6px; font: 800 10px/1.4 inherit; letter-spacing: 0.1em; color: #111; background: #f0b03a; border-radius: 3px; font-style: normal; }
+.best { margin: 0 0 22px; font-size: 13px; color: var(--ink-dim); font-variant-numeric: tabular-nums; }
 .result dt { font-size: 12px; color: var(--ink-dim); letter-spacing: 0.08em; }
 .result dd { margin: 4px 0 0; font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; }
 
@@ -222,7 +257,7 @@ h2 { margin: 8px 0 12px; font-size: clamp(22px, 4.6vw, 30px); letter-spacing: 0.
 /* ── 디버그 패널 (F3) */
 .debug {
   position: absolute;
-  top: 20px;
+  top: 92px;
   right: 24px;
   min-width: 250px;
   padding: 10px 12px;
@@ -241,5 +276,7 @@ h2 { margin: 8px 0 12px; font-size: clamp(22px, 4.6vw, 30px); letter-spacing: 0.
 
 @media (max-width: 720px) {
   .hud-bl { display: none; }
+  .hud-tr { top: auto; bottom: 150px; }
+  .result { grid-template-columns: 1fr; }
   .ammo b { font-size: 40px; }
 }

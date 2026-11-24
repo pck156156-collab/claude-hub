@@ -141,10 +141,14 @@ export const ZOMBIE_TYPES: Record<string, ZombieStats> = {
 };
 
 /** 테스트용 좀비 생성 (일정 간격). 난이도 증가 · 웨이브는 3단계 */
+/**
+ * 좀비 생성 공통 설정. 생성 간격 · 동시 상한 · 능력치 배율은 웨이브(WAVE_CONFIG)가 정한다.
+ */
 export const SPAWN_CONFIG = {
   firstDelay: 3,
+  /** 웨이브 시스템이 없을 때의 기본값 (웨이브 1 과 같게) */
   interval: 2,
-  maxAlive: 20,
+  maxAlive: 15,
   /** 플레이어로부터 생성 거리 범위 */
   minDistance: 18,
   maxDistance: 34,
@@ -153,6 +157,58 @@ export const SPAWN_CONFIG = {
   /** 카메라 화면 밖으로 인정하는 정규화 좌표 여유 */
   offscreenMargin: 1.08,
 };
+
+/** 웨이브 1회분 난이도 */
+export interface WaveParams {
+  wave: number;
+  /** 생성 간격 (초) */
+  spawnInterval: number;
+  /** 동시에 살아 있을 수 있는 좀비 수 */
+  maxAlive: number;
+  /** 좀비 체력 배율 */
+  healthMultiplier: number;
+  /** 좀비 이동 속도 배율 */
+  speedMultiplier: number;
+}
+
+/**
+ * 웨이브: 60초마다 자동 전환. 1~5 웨이브는 표의 값, 6웨이브부터는 완만한 계산식 + 상한.
+ * 4단계(성장 시스템)가 들어오면 다시 조정할 예정.
+ */
+export const WAVE_CONFIG = {
+  duration: 60,
+  table: [
+    { spawnInterval: 2.0, maxAlive: 15, healthMultiplier: 1.0, speedMultiplier: 1.0 },
+    { spawnInterval: 1.7, maxAlive: 20, healthMultiplier: 1.15, speedMultiplier: 1.0 },
+    { spawnInterval: 1.4, maxAlive: 25, healthMultiplier: 1.3, speedMultiplier: 1.03 },
+    { spawnInterval: 1.1, maxAlive: 30, healthMultiplier: 1.45, speedMultiplier: 1.06 },
+    { spawnInterval: 0.9, maxAlive: 35, healthMultiplier: 1.6, speedMultiplier: 1.1 },
+  ],
+  /** 6웨이브 이후: 웨이브마다 생성 간격 ×0.95, 상한 +2, 체력 +0.08, 속도 +0.02 */
+  after: { intervalFactor: 0.95, maxAliveStep: 2, healthStep: 0.08, speedStep: 0.02 },
+  /** 상한 (플레이 불가능해지지 않도록) */
+  limits: { minInterval: 0.55, maxAlive: 50, maxHealthMultiplier: 2.6, maxSpeedMultiplier: 1.25 },
+  /** 웨이브 알림 표시 시간 (초) */
+  bannerTime: 2.6,
+};
+
+/** 웨이브 번호(1부터) → 난이도 */
+export function waveParams(wave: number): WaveParams {
+  const w = Math.max(1, Math.floor(wave));
+  const t = WAVE_CONFIG.table;
+  if (w <= t.length) return { wave: w, ...t[w - 1] };
+  const last = t[t.length - 1];
+  const n = w - t.length;
+  const a = WAVE_CONFIG.after;
+  const l = WAVE_CONFIG.limits;
+  return {
+    wave: w,
+    spawnInterval: Math.max(l.minInterval, +(last.spawnInterval * Math.pow(a.intervalFactor, n)).toFixed(3)),
+    maxAlive: Math.min(l.maxAlive, last.maxAlive + a.maxAliveStep * n),
+    healthMultiplier: Math.min(l.maxHealthMultiplier, +(last.healthMultiplier + a.healthStep * n).toFixed(2)),
+    speedMultiplier: Math.min(l.maxSpeedMultiplier, +(last.speedMultiplier + a.speedStep * n).toFixed(2)),
+  };
+}
 
 /** 경로 탐색 (격자 + 흐름장) */
 export const NAV_CONFIG = {

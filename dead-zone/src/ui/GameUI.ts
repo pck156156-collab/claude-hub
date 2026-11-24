@@ -1,4 +1,6 @@
-import { QUALITY_PRESETS, QualityLevel } from '../config/GameConfig';
+import { QUALITY_PRESETS, QualityLevel, WAVE_CONFIG } from '../config/GameConfig';
+import { RecordResult, RecordSet } from '../core/Records';
+import { formatTime } from '../waves/WaveSystem';
 
 /**
  * DOM 기반 HUD: 체력 · 탄약 · 무기 이름 · 조준 커서 · 화면 전환.
@@ -35,6 +37,12 @@ export class GameUI {
   private readonly vignette = $('damage-vignette');
   private readonly killsBox = document.querySelector('.kills') as HTMLElement;
   private readonly killCount = $('kill-count');
+  private readonly aliveCount = $('alive-count');
+  private readonly waveNum = $('wave-num');
+  private readonly surviveTime = $('survive-time');
+  private readonly waveProgress = $('wave-progress');
+  private readonly banner = $('wave-banner');
+  private readonly bannerNum = $('wb-num');
   private readonly pauseReason = $('pause-reason');
   private readonly last: Partial<Record<string, unknown>> = {};
   private pipEls: HTMLElement[] = [];
@@ -84,11 +92,34 @@ export class GameUI {
     restartAnimation(this.healthBox, 'hurt');
   }
 
-  showGameOver(kills: number, seconds: number): void {
-    $('go-kills').textContent = String(kills);
-    const m = Math.floor(seconds / 60);
-    const sec = Math.floor(seconds % 60);
-    $('go-time').textContent = `${m}:${String(sec).padStart(2, '0')}`;
+  /** 웨이브 · 생존 시간 · 생존 좀비 수 (값이 바뀔 때만 DOM 갱신) */
+  setWaveStatus(wave: number, seconds: number, alive: number): void {
+    this.set('wave', wave, (v) => (this.waveNum.textContent = String(v)));
+    this.set('time', Math.floor(seconds), () => (this.surviveTime.textContent = formatTime(seconds)));
+    this.set('alive', alive, (v) => (this.aliveCount.textContent = String(v)));
+    const progress = Math.round(((seconds % WAVE_CONFIG.duration) / WAVE_CONFIG.duration) * 200) / 2;
+    this.set('waveProgress', progress, (v) => (this.waveProgress.style.width = `${v}%`));
+  }
+
+  /** 화면 중앙 "WAVE n / SURVIVE!" 알림 (CSS 애니메이션으로 나타났다 사라짐) */
+  showWaveBanner(wave: number): void {
+    this.bannerNum.textContent = String(wave);
+    restartAnimation(this.banner, 'show');
+  }
+
+  hideWaveBanner(): void {
+    this.banner.classList.remove('show');
+  }
+
+  showGameOver(run: RecordSet, rec: RecordResult): void {
+    $('go-time').textContent = formatTime(run.time);
+    $('go-wave').textContent = String(run.wave);
+    $('go-kills').textContent = String(run.kills);
+    $('go-time-new').hidden = !rec.newTime;
+    $('go-wave-new').hidden = !rec.newWave;
+    $('go-kills-new').hidden = !rec.newKills;
+    $('go-best').textContent = `최고 기록 — 생존 ${formatTime(rec.best.time)} · 웨이브 ${rec.best.wave} · 처치 ${rec.best.kills}`;
+    this.hideWaveBanner();
     this.showScreen('gameover');
   }
 
