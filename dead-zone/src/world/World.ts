@@ -374,7 +374,7 @@ export class World {
       }
     }
     // 그림자 없는 점광원 (성능상 일부만)
-    for (const p of lightPositions.slice(0, 6)) {
+    for (const p of lightPositions.slice(0, RENDER_CONFIG.streetLightCount)) {
       const l = new THREE.PointLight(0xffc27a, 18, 13, 1.6);
       l.position.copy(p);
       this.root.add(l);

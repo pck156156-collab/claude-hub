@@ -62,9 +62,16 @@ export class GameUI {
     this.crosshair.classList.toggle('kill', kill);
   }
 
-  update(dt: number, s: UIState, mouseX: number, mouseY: number): void {
-    // 조준 커서: 마우스 위치 그대로 (transform 만 바꿔 레이아웃 없음)
-    this.crosshair.style.transform = `translate3d(${mouseX}px, ${mouseY}px, 0)`;
+  /**
+   * 조준 커서 보조 표시(탄 퍼짐 · 재장전 원 · 명중 표시) 위치.
+   * 마우스 이벤트에서 바로 호출되므로 게임 프레임이 낮아도 지연되지 않는다.
+   * 가운데 십자선 자체는 운영체제 커서(CSS cursor)로 그려 지연이 전혀 없다.
+   */
+  moveCursor(x: number, y: number): void {
+    this.crosshair.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+  }
+
+  update(dt: number, s: UIState): void {
     this.set('spread', Math.round(s.spread * 8), (v) => this.crosshair.style.setProperty('--spread', `${v}px`));
     if (this.hitTimer > 0) {
       this.hitTimer -= dt;

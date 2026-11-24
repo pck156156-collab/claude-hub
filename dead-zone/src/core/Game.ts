@@ -57,10 +57,11 @@ export class Game {
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, RENDER_CONFIG.maxPixelRatio));
+    this.renderer.setPixelRatio(this.pixelRatio);
     this.renderer.setSize(window.innerWidth, window.innerHeight, false);
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // PCFSoft 보다 가벼운 PCF (그림자 가장자리 4배 샘플 → 1배)
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = RENDER_CONFIG.exposure;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -124,6 +125,7 @@ export class Game {
     }
     this.renderFrame(this.state === 'playing' ? dt : 0, alpha, draw);
     this.debug.tick(frameDt, () => this.debugRows());
+    if (draw && this.state === 'playing') this.adaptResolution(frameDt);
   }
 
   beginPlay(): void {
@@ -147,6 +149,40 @@ export class Game {
     this.world.dispose();
     this.audio.dispose();
     this.renderer.dispose();
+  }
+
+  /** 현재 렌더 배율 (동적 해상도) */
+  pixelRatio = Math.min(window.devicePixelRatio, RENDER_CONFIG.maxPixelRatio);
+  private perfTime = 0;
+  private perfFrames = 0;
+  private perfGood = 0;
+
+  /** 1초마다 평균 FPS 를 보고 렌더 배율을 조절한다 */
+  private adaptResolution(frameDt: number): void {
+    const d = RENDER_CONFIG.dynamicResolution;
+    if (!d.enabled || frameDt <= 0) return;
+    this.perfTime += frameDt;
+    this.perfFrames++;
+    if (this.perfTime < 1) return;
+    const fps = this.perfFrames / this.perfTime;
+    this.perfTime = 0;
+    this.perfFrames = 0;
+    const max = Math.min(window.devicePixelRatio, RENDER_CONFIG.maxPixelRatio);
+    let next = this.pixelRatio;
+    if (fps < d.lowFps && this.pixelRatio > d.minPixelRatio) {
+      next = Math.max(d.minPixelRatio, this.pixelRatio - d.step);
+      this.perfGood = 0;
+    } else if (fps >= d.highFps && this.pixelRatio < max) {
+      // 올릴 때는 신중하게: 5초 연속 여유가 있을 때만
+      if (++this.perfGood >= 5) { next = Math.min(max, this.pixelRatio + d.step); this.perfGood = 0; }
+    } else {
+      this.perfGood = 0;
+    }
+    if (next !== this.pixelRatio) {
+      this.pixelRatio = next;
+      this.renderer.setPixelRatio(next);
+      this.renderer.setSize(window.innerWidth, window.innerHeight, false);
+    }
   }
 
   private setState(next: State, reason = ''): void {
@@ -222,6 +258,7 @@ export class Game {
       });
     };
 
+    this.input.onPointerMove = (x, y) => this.ui.moveCursor(x, y);
     this.input.onPress('KeyR', () => { if (this.state === 'playing') this.weapon.requestReload(); });
     this.input.onPress('Escape', () => {
       if (this.state === 'playing') this.pause('ESC 키로 일시정지했습니다.');
@@ -235,7 +272,8 @@ export class Game {
     const onBlur = () => this.pause('게임 창이 포커스를 잃어 일시정지했습니다.');
     const onVisibility = () => { if (document.hidden) this.pause('탭이 숨겨져 일시정지했습니다.'); };
     const onResize = () => {
-      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, RENDER_CONFIG.maxPixelRatio));
+      this.pixelRatio = Math.min(this.pixelRatio, window.devicePixelRatio, RENDER_CONFIG.maxPixelRatio);
+      this.renderer.setPixelRatio(this.pixelRatio);
       this.renderer.setSize(window.innerWidth, window.innerHeight, false);
       this.gameCamera.resize(window.innerWidth / window.innerHeight);
       if (this.state !== 'playing') this.renderFrame(0, 1);
@@ -285,7 +323,7 @@ export class Game {
     this.ui.update(dt, {
       health: p.health, maxHealth: p.maxHealth, ammo: w.ammo, magazineSize: w.stats.magazineSize, weaponName: w.stats.name,
       reloading: w.reloading, reloadProgress: w.reloadProgress, spread: this.spread,
-    }, this.input.mouseScreen.x, this.input.mouseScreen.y);
+    });
 
     if (draw) this.renderer.render(this.scene, this.gameCamera.camera);
   }
@@ -304,6 +342,7 @@ export class Game {
       ['투사체', `${this.projectiles.activeCount} / 풀 ${this.projectiles.capacity}`],
       ['파티클', String(this.effects.particleCount)],
       ['표적 파괴', String(this.targets.reduce((n, t) => n + t.destroyedCount, 0))],
+      ['렌더 배율', `${this.pixelRatio.toFixed(2)} (${this.renderer.domElement.width}×${this.renderer.domElement.height})`],
       ['드로우콜', String(info.render.calls)],
       ['삼각형', info.render.triangles.toLocaleString()],
       ['카메라', `${CAMERA_CONFIG.pitchDeg}° / ${CAMERA_CONFIG.distance}m`],

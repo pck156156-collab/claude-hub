@@ -15,6 +15,8 @@ export class InputManager {
   readonly mouseScreen = { x: 0, y: 0 };
   mouseInside = false;
   leftButton = false;
+  /** 마우스가 움직이는 즉시 호출 (게임 프레임을 기다리지 않음 → 커서 UI 지연 없음) */
+  onPointerMove: ((x: number, y: number) => void) | null = null;
 
   private pressHandlers = new Map<string, Array<() => void>>();
   private readonly element: HTMLElement;
@@ -82,6 +84,7 @@ export class InputManager {
     this.mouseNdc.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
     this.mouseNdc.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
     this.mouseInside = true;
+    this.onPointerMove?.(e.clientX, e.clientY);
   }
 
   private on(target: EventTarget, type: string, fn: EventListener): void {

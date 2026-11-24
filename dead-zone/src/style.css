@@ -22,8 +22,9 @@ html, body {
 }
 
 #app { position: fixed; inset: 0; }
-#game-canvas { display: block; width: 100%; height: 100%; cursor: none; }
-.playing #game-canvas, .playing .hud { cursor: none; }
+#game-canvas { display: block; width: 100%; height: 100%; }
+/* 조준 십자선은 운영체제 커서로 그린다 → 게임 프레임과 무관하게 마우스와 동시에 움직임 */
+.playing #game-canvas { cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='7' fill='none' stroke='%23000' stroke-opacity='.55' stroke-width='3.5'/%3E%3Ccircle cx='16' cy='16' r='7' fill='none' stroke='%23fff' stroke-width='1.5'/%3E%3Ccircle cx='16' cy='16' r='2' fill='%23fff' stroke='%23000' stroke-opacity='.6' stroke-width='1'/%3E%3C/svg%3E") 16 16, crosshair; }
 
 /* ── HUD */
 .hud { position: absolute; inset: 0; pointer-events: none; }
@@ -103,8 +104,7 @@ kbd.wide { min-width: 0; }
   display: none;
 }
 .playing .crosshair { display: block; }
-.ch-ring { position: absolute; inset: 12px; border: 1.5px solid rgba(255, 255, 255, 0.5); border-radius: 50%; }
-.ch-dot { position: absolute; left: 20px; top: 20px; width: 4px; height: 4px; background: #fff; border-radius: 50%; box-shadow: 0 0 3px #000; }
+.ch-ring, .ch-dot { display: none; } /* 운영체제 커서가 대신 그림 */
 .ch-tick { position: absolute; background: #fff; box-shadow: 0 0 2px rgba(0, 0, 0, 0.9); }
 .ch-tick.t, .ch-tick.b { left: 21px; width: 2px; height: 7px; }
 .ch-tick.l, .ch-tick.r { top: 21px; width: 7px; height: 2px; }
@@ -116,7 +116,7 @@ kbd.wide { min-width: 0; }
 .ch-reload circle { fill: none; stroke: #9fe8ff; stroke-width: 3; stroke-dasharray: 119.4; stroke-dashoffset: 119.4; }
 .crosshair.reloading .ch-reload { opacity: 1; }
 .crosshair.reloading .ch-tick { opacity: 0.3; }
-.crosshair.empty .ch-dot, .crosshair.empty .ch-tick { background: var(--accent); }
+.crosshair.empty .ch-tick { background: var(--accent); }
 .ch-hit { position: absolute; inset: 0; opacity: 0; transition: opacity 0.12s; }
 .ch-hit i { position: absolute; width: 9px; height: 2px; background: #ff5a3c; left: 17px; top: 21px; }
 .ch-hit i:nth-child(1) { transform: rotate(45deg) translate(-11px); }

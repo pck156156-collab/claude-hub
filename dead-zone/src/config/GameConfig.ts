@@ -95,7 +95,7 @@ export const CAMERA_CONFIG = {
   /** 캐릭터 추적 부드러움 (클수록 즉각적) */
   followSharpness: 9,
   /** 조준 방향으로 화면을 살짝 미는 거리 (0 이면 항상 정중앙) */
-  aimLookAhead: 1.0,
+  aimLookAhead: 0,
   lookAheadSharpness: 4,
   /** 캐릭터를 가리는 건물을 반투명하게 할 때의 불투명도 */
   occluderOpacity: 0.3,
@@ -117,7 +117,15 @@ export const AUDIO_CONFIG = {
 };
 
 export const RENDER_CONFIG = {
-  maxPixelRatio: 2,
+  /** 고해상도 화면에서도 이 배율까지만 렌더 (픽셀 수가 배율² 로 늘어남) */
+  maxPixelRatio: 1.5,
+  /**
+   * 동적 해상도: 평균 FPS 가 lowFps 아래로 떨어지면 렌더 배율을 단계적으로 낮추고,
+   * highFps 이상이 오래 유지되면 다시 올린다. 조작 반응성(프레임)을 화질보다 우선한다.
+   */
+  dynamicResolution: { enabled: true, lowFps: 50, highFps: 58, minPixelRatio: 0.75, step: 0.25 },
+  /** 가로등 점광원 수 (광원 하나마다 모든 표면의 계산 비용이 늘어난다) */
+  streetLightCount: 3,
   shadowMapSize: 2048,
   /** 그림자 카메라가 덮는 반경 (플레이어 중심) */
   shadowRadius: 32,
