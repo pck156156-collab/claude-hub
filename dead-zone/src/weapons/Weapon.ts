@@ -113,6 +113,8 @@ export class Weapon {
       this.cooldown += this.fireInterval;
     }
     if (this.cooldown < 0) this.cooldown = 0;
+    // 마지막 탄을 쏘면 방아쇠와 상관없이 바로 스스로 재장전
+    if (this.ammo === 0 && this.stats.autoReloadOnEmpty) this.requestReload();
   }
 
   /** 다시 시작: 탄창 가득 · 재장전 취소 */

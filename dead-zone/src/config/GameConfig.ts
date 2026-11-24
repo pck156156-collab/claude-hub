@@ -59,7 +59,7 @@ export const WEAPON_CONFIG = {
     damage: 25,
     /** 탄 퍼짐 (도). 0 이면 완전히 조준선 그대로 */
     spreadDeg: 0.8,
-    /** 빈 탄창에서 방아쇠를 다시 당기면 자동 재장전 */
+    /** 탄창을 다 쓰면 자동으로 재장전 (false 면 R 키로만) */
     autoReloadOnEmpty: true,
     /**
      * 총구 위치 (캐릭터 로컬, 조준 자세 기준). three.js 규약상 정면 +z 일 때 캐릭터의 오른쪽은 -x.
