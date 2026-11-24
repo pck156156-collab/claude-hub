@@ -272,19 +272,3 @@ export function hazardTexture(): THREE.CanvasTexture {
   speckle(ctx, S, S, rng, 600, 'rgba(255,255,255,0.1)', 'rgba(0,0,0,0.3)');
   return toTexture(c);
 }
-
-/** 연습 표적 과녁 */
-export function bullseyeTexture(): THREE.CanvasTexture {
-  const S = 128;
-  const [c, ctx] = canvas(S, S);
-  const rings = ['#f2efe6', '#c0262b', '#f2efe6', '#c0262b', '#f2efe6', '#c0262b'];
-  rings.forEach((col, i) => {
-    ctx.fillStyle = col;
-    ctx.beginPath();
-    ctx.arc(S / 2, S / 2, S / 2 - i * 10, 0, Math.PI * 2);
-    ctx.fill();
-  });
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
-}

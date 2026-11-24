@@ -115,6 +115,15 @@ export class Weapon {
     if (this.cooldown < 0) this.cooldown = 0;
   }
 
+  /** 다시 시작: 탄창 가득 · 재장전 취소 */
+  reset(): void {
+    this.ammo = this.stats.magazineSize;
+    this.reloading = false;
+    this.reloadTimer = 0;
+    this.cooldown = 0;
+    this.triggerWasDown = false;
+  }
+
   /** 상태 초기화 (일시정지 해제 등) */
   releaseTrigger(): void {
     this.triggerWasDown = false;

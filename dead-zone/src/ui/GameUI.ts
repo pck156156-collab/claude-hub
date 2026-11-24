@@ -30,7 +30,11 @@ export class GameUI {
   private readonly reloadHint = $('reload-hint');
   private readonly crosshair = $('crosshair');
   private readonly reloadCircle = this.crosshair.querySelector('.ch-reload circle') as SVGCircleElement;
-  private readonly screens = { start: $('screen-start'), pause: $('screen-pause'), error: $('screen-error') };
+  private readonly screens = { start: $('screen-start'), pause: $('screen-pause'), gameover: $('screen-gameover'), error: $('screen-error') };
+  private readonly healthBox = document.querySelector('.health') as HTMLElement;
+  private readonly vignette = $('damage-vignette');
+  private readonly killsBox = document.querySelector('.kills') as HTMLElement;
+  private readonly killCount = $('kill-count');
   private readonly pauseReason = $('pause-reason');
   private readonly last: Partial<Record<string, unknown>> = {};
   private pipEls: HTMLElement[] = [];
@@ -40,10 +44,12 @@ export class GameUI {
   onQuality: ((level: QualityLevel) => void) | null = null;
   private readonly qualityButtons: HTMLButtonElement[] = [];
   onResume: (() => void) | null = null;
+  onRestart: (() => void) | null = null;
 
   constructor() {
     $('btn-start').addEventListener('click', () => this.onStart?.());
     $('btn-resume').addEventListener('click', () => this.onResume?.());
+    $('btn-restart').addEventListener('click', () => this.onRestart?.());
     for (const group of document.querySelectorAll('.quality-group')) {
       for (const [level, preset] of Object.entries(QUALITY_PRESETS)) {
         const b = document.createElement('button');
@@ -58,12 +64,32 @@ export class GameUI {
     }
   }
 
-  showScreen(name: 'start' | 'pause' | 'error' | null, reason = ''): void {
+  showScreen(name: 'start' | 'pause' | 'gameover' | 'error' | null, reason = ''): void {
     for (const [k, el] of Object.entries(this.screens)) el.hidden = k !== name;
     this.app.classList.toggle('playing', name === null);
     if (name === 'pause') this.pauseReason.textContent = reason;
     if (name === 'start') $('btn-start').focus({ preventScroll: true });
     if (name === 'pause') $('btn-resume').focus({ preventScroll: true });
+    if (name === 'gameover') $('btn-restart').focus({ preventScroll: true });
+  }
+
+  setKills(n: number): void {
+    this.killCount.textContent = String(n);
+    if (n > 0) restartAnimation(this.killsBox, 'bump');
+  }
+
+  /** 플레이어 피격: 화면 가장자리 붉은 섬광 + 체력 패널 흔들림 */
+  hurt(): void {
+    restartAnimation(this.vignette, 'flash');
+    restartAnimation(this.healthBox, 'hurt');
+  }
+
+  showGameOver(kills: number, seconds: number): void {
+    $('go-kills').textContent = String(kills);
+    const m = Math.floor(seconds / 60);
+    const sec = Math.floor(seconds % 60);
+    $('go-time').textContent = `${m}:${String(sec).padStart(2, '0')}`;
+    this.showScreen('gameover');
   }
 
   setQuality(level: QualityLevel): void {
@@ -101,6 +127,9 @@ export class GameUI {
     this.set('hp', `${s.health}/${s.maxHealth}`, () => {
       this.hpText.textContent = `${Math.ceil(s.health)} / ${s.maxHealth}`;
       this.hpFill.style.width = `${(100 * s.health) / s.maxHealth}%`;
+      const low = s.health > 0 && s.health <= s.maxHealth * 0.3;
+      this.healthBox.classList.toggle('low', low);
+      this.vignette.classList.toggle('low', low);
     });
     this.set('weapon', s.weaponName, (v) => (this.weaponName.textContent = v));
     this.set('mag', s.magazineSize, (v) => {
@@ -131,4 +160,11 @@ export class GameUI {
     this.last[key] = value;
     apply(value);
   }
+}
+
+/** CSS 애니메이션 클래스를 떼었다 붙여 처음부터 다시 재생 */
+function restartAnimation(el: HTMLElement, cls: string): void {
+  el.classList.remove(cls);
+  void el.offsetWidth;
+  el.classList.add(cls);
 }

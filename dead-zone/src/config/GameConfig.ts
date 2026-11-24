@@ -33,6 +33,8 @@ export const PLAYER_CONFIG = {
   /** 이 속도 미만이고 입력이 없으면 즉시 정지 */
   stopEpsilon: 0.05,
   maxHealth: 100,
+  /** 피격 후 무적 시간 (초): 여러 좀비가 동시에 때려도 이 시간 동안은 한 번만 피해 */
+  invulnerableTime: 0.4,
   /**
    * 캐릭터 회전이 조준점을 따라가는 속도. 0 = 즉시 (커서와 발사 방향이 항상 정확히 일치).
    * 값을 주면 부드럽게 돌지만 빠르게 마우스를 휘두를 때 그만큼 조준이 늦어진다.
@@ -54,7 +56,7 @@ export const WEAPON_CONFIG = {
     reloadTime: 1.8,
     projectileSpeed: 60,
     range: 45,
-    damage: 20,
+    damage: 25,
     /** 탄 퍼짐 (도). 0 이면 완전히 조준선 그대로 */
     spreadDeg: 0.8,
     /** 빈 탄창에서 방아쇠를 다시 당기면 자동 재장전 */
@@ -74,15 +76,96 @@ export const PROJECTILE_CONFIG = {
   tracerWidth: 0.08,
 };
 
-export const TARGET_CONFIG = {
-  maxHealth: 100,
-  radius: 0.45,
-  height: 2.0,
-  respawnDelay: 3,
-  /** 연습 표적 위치 (x, z) */
-  positions: [
-    [6, -12], [-8, -16], [14, -4], [-12, 7.5], [10, 14], [-4, 18], [22, 16], [-20, -12.5],
-  ] as [number, number][],
+/**
+ * 좀비 종류별 능력치. 새 종류(빠른 · 탱커 · 원거리 좀비)는 같은 형태로 항목만 추가하면 된다.
+ * 외형 차이는 appearance (색상 · 크기 · 자세) 로 표현한다.
+ */
+export interface ZombieStats {
+  id: string;
+  name: string;
+  maxHealth: number;
+  /** 이동 속도 (단위/초) */
+  moveSpeed: number;
+  /** 공격 1회 피해 */
+  attackDamage: number;
+  /** 공격 사거리: 좀비 중심 ~ 플레이어 중심 거리 */
+  attackRange: number;
+  /** 공격 시작 간격 (초) */
+  attackInterval: number;
+  /** 공격 시작 → 실제 피해 판정까지 (예비 동작) */
+  attackWindup: number;
+  /** 공격 전체 동작 시간 (판정 후 회복 포함) */
+  attackDuration: number;
+  /** 판정 순간 플레이어가 좀비 정면 기준 이 각도(도) 안에 있어야 피해 */
+  attackArcDeg: number;
+  radius: number;
+  /** 피격 경직 시간 */
+  hitStunTime: number;
+  /** 넉백 속도 (단위/초, 빠르게 감쇠) */
+  knockback: number;
+  /** 회전 속도 (rad/s) */
+  turnSpeed: number;
+  /** 땅에서 기어 나오는 시간 */
+  spawnTime: number;
+  /** 사망 후 시체가 남는 시간 → 이후 가라앉아 제거 */
+  corpseTime: number;
+  appearance: { scale: number; hunch: number; skin: number[]; shirts: number[]; pants: number[] };
+}
+
+export const ZOMBIE_TYPES: Record<string, ZombieStats> = {
+  walker: {
+    id: 'walker',
+    name: '워커',
+    maxHealth: 100,
+    moveSpeed: 2.2,
+    attackDamage: 10,
+    attackRange: 1.5,
+    attackInterval: 1.2,
+    attackWindup: 0.45,
+    attackDuration: 0.85,
+    attackArcDeg: 75,
+    radius: 0.4,
+    hitStunTime: 0.18,
+    knockback: 2.6,
+    turnSpeed: 5,
+    spawnTime: 1.0,
+    corpseTime: 3.5,
+    appearance: {
+      scale: 1,
+      hunch: 0.38,
+      skin: [0x7f8c6b, 0x8a8f73, 0x76836a, 0x8d8a72],
+      shirts: [0x2f3431, 0x3b2f2a, 0x2a3039, 0x3a3a34, 0x452826],
+      pants: [0x22252a, 0x2b2923, 0x1f2a2e],
+    },
+  },
+};
+
+/** 테스트용 좀비 생성 (일정 간격). 난이도 증가 · 웨이브는 3단계 */
+export const SPAWN_CONFIG = {
+  firstDelay: 3,
+  interval: 2,
+  maxAlive: 20,
+  /** 플레이어로부터 생성 거리 범위 */
+  minDistance: 18,
+  maxDistance: 34,
+  /** 남아 있을 수 있는 시체 최대 수 (넘으면 오래된 것부터 정리) */
+  maxCorpses: 10,
+  /** 카메라 화면 밖으로 인정하는 정규화 좌표 여유 */
+  offscreenMargin: 1.08,
+};
+
+/** 경로 탐색 (격자 + 흐름장) */
+export const NAV_CONFIG = {
+  /** 격자 칸 크기 */
+  cellSize: 1,
+  /** 칸이 막혔다고 볼 장애물 여유 반경 (좀비 반경 + 여유) */
+  clearance: 0.5,
+  /** 흐름장 재계산 주기 (초). 플레이어가 다른 칸으로 옮기면 이 주기로 갱신 */
+  refreshInterval: 0.25,
+  /** 직선 시야 검사 주기 (초, 좀비마다 엇갈려서) */
+  lineOfSightInterval: 0.2,
+  /** 거의 움직이지 못한 채 이 시간이 지나면 옆으로 비켜 감 */
+  stuckTime: 0.7,
 };
 
 export const CAMERA_CONFIG = {

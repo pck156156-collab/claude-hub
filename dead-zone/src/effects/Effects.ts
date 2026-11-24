@@ -111,58 +111,41 @@ export class Effects {
     }
   }
 
-  /** 표적 피격: 나무 조각 + 섬광 */
-  impactTarget(point: THREE.Vector3, direction: THREE.Vector3): void {
-    for (let i = 0; i < 5; i++) {
-      const spread = 0.9;
+  /**
+   * 좀비 피격: 피격 지점의 짙은 색 튐 + 작은 먼지. 잔혹함보다 "맞았다" 는 피드백 위주.
+   */
+  impactFlesh(point: THREE.Vector3, direction: THREE.Vector3): void {
+    for (let i = 0; i < 6; i++) {
       this.debris.spawn({
         x: point.x, y: point.y, z: point.z,
-        vx: direction.x * (2 + Math.random() * 3) + (Math.random() - 0.5) * spread * 4,
-        vy: 1 + Math.random() * 3,
-        vz: direction.z * (2 + Math.random() * 3) + (Math.random() - 0.5) * spread * 4,
-        life: 1.1, size: 0.06 + Math.random() * 0.06, endScale: 0.7, gravity: 14, bounce: 0.25, spin: 12, shape: [1, 0.4, 2],
-        color: tmpColor.setRGB(0.62, 0.46, 0.28),
+        vx: direction.x * (1.5 + Math.random() * 2.5) + (Math.random() - 0.5) * 2.2,
+        vy: 0.8 + Math.random() * 2.2,
+        vz: direction.z * (1.5 + Math.random() * 2.5) + (Math.random() - 0.5) * 2.2,
+        life: 0.7, size: 0.04 + Math.random() * 0.04, endScale: 0.4, gravity: 14, bounce: 0.1, spin: 8,
+        color: tmpColor.setRGB(0.32, 0.05, 0.04),
       });
     }
-    for (let i = 0; i < 4; i++) {
-      const v = randomHemisphere(direction.clone().negate(), 0.9);
+    this.smoke.spawn({
+      x: point.x, y: point.y, z: point.z, vx: direction.x * 0.8, vy: 0.2, vz: direction.z * 0.8,
+      life: 0.35, size: 0.25, endScale: 2.2, drag: 3, spin: 1, color: tmpColor.setRGB(0.45, 0.16, 0.13),
+    });
+    for (let i = 0; i < 3; i++) {
+      const v = randomHemisphere(direction.clone().negate(), 0.8);
       this.sparks.spawn({
-        x: point.x, y: point.y, z: point.z, vx: v.x * 4, vy: v.y * 4, vz: v.z * 4,
-        life: 0.1, size: 1, endScale: 0.2, drag: 4, stretch: 0.02, shape: [0.03, 0.03, 0.05], color: tmpColor.setRGB(1.4, 1.2, 0.8),
+        x: point.x, y: point.y, z: point.z, vx: v.x * 3, vy: v.y * 3, vz: v.z * 3,
+        life: 0.08, size: 1, endScale: 0.2, drag: 4, stretch: 0.02, shape: [0.03, 0.03, 0.05], color: tmpColor.setRGB(1.3, 1.1, 0.9),
       });
     }
   }
 
-  /** 표적 파괴: 큰 파편 다량 + 먼지 구름 */
-  explodeTarget(center: THREE.Vector3, direction: THREE.Vector3): void {
-    for (let i = 0; i < 26; i++) {
-      const a = Math.random() * Math.PI * 2;
-      const out = 1.5 + Math.random() * 3;
-      const y = 0.5 + Math.random() * 1.5;
-      const wood = Math.random() < 0.7;
-      this.debris.spawn({
-        x: center.x + Math.cos(a) * 0.2, y: center.y + y - 1, z: center.z + Math.sin(a) * 0.2,
-        vx: Math.cos(a) * out + direction.x * 3, vy: 2 + Math.random() * 4, vz: Math.sin(a) * out + direction.z * 3,
-        life: 2.2 + Math.random(), size: 0.1 + Math.random() * 0.16, endScale: 0.8, gravity: 14, bounce: 0.3, spin: 8,
-        shape: wood ? [1, 0.35, 2.2] : [1, 1, 1],
-        color: wood ? tmpColor.setRGB(0.62, 0.46, 0.28) : (Math.random() < 0.5 ? tmpColor.setRGB(0.75, 0.15, 0.13) : tmpColor.setRGB(0.9, 0.88, 0.82)),
-      });
-    }
-    for (let i = 0; i < 8; i++) {
+  /** 좀비 사망: 쓰러지는 자리 먼지 */
+  zombieDeath(center: THREE.Vector3): void {
+    for (let i = 0; i < 6; i++) {
       const a = Math.random() * Math.PI * 2;
       this.smoke.spawn({
-        x: center.x + Math.cos(a) * 0.3, y: 0.4 + Math.random() * 1.2, z: center.z + Math.sin(a) * 0.3,
-        vx: Math.cos(a) * 1.2, vy: 0.5 + Math.random() * 0.6, vz: Math.sin(a) * 1.2,
-        life: 1 + Math.random() * 0.5, size: 0.7, endScale: 3, drag: 2, spin: 0.6, color: tmpColor.setRGB(0.6, 0.56, 0.5),
-      });
-    }
-    for (let i = 0; i < 14; i++) {
-      const v = randomHemisphere(new THREE.Vector3(0, 1, 0), 1);
-      const speed = 4 + Math.random() * 6;
-      this.sparks.spawn({
-        x: center.x, y: 1.2, z: center.z, vx: v.x * speed, vy: v.y * speed, vz: v.z * speed,
-        life: 0.25 + Math.random() * 0.2, size: 1, endScale: 0.2, gravity: 8, drag: 2, stretch: 0.025, shape: [0.035, 0.035, 0.06],
-        color: tmpColor.setRGB(1.6, 1.0, 0.4),
+        x: center.x + Math.cos(a) * 0.4, y: 0.25, z: center.z + Math.sin(a) * 0.4,
+        vx: Math.cos(a) * 0.9, vy: 0.25, vz: Math.sin(a) * 0.9,
+        life: 0.9 + Math.random() * 0.4, size: 0.5, endScale: 2.6, drag: 2.2, spin: 0.5, color: tmpColor.setRGB(0.5, 0.47, 0.42),
       });
     }
   }

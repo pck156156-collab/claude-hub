@@ -71,12 +71,31 @@ export class AudioManager {
     this.noiseBurst(c.currentTime, 0.06, 900, 0.5, 'bandpass', 1.5);
   }
 
-  breakTarget(): void {
+  /** 좀비가 쓰러지는 소리 */
+  bodyFall(): void {
     const c = this.ready();
     if (!c) return;
     const t = c.currentTime;
-    this.noiseBurst(t, 0.35, 700, 0.8, 'lowpass', 0.8);
-    this.noiseBurst(t + 0.05, 0.25, 2200, 0.35, 'bandpass', 1);
+    this.noiseBurst(t + 0.15, 0.3, 400, 0.8, 'lowpass', 0.8);
+    this.noiseBurst(t, 0.25, 900, 0.3, 'bandpass', 1.5);
+  }
+
+  /** 플레이어 피격 */
+  hurt(): void {
+    const c = this.ready();
+    if (!c) return;
+    const t = c.currentTime;
+    const o = c.createOscillator();
+    const g = c.createGain();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(180, t);
+    o.frequency.exponentialRampToValueAtTime(70, t + 0.2);
+    g.gain.setValueAtTime(0.35, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+    o.connect(g).connect(this.master!);
+    o.start(t);
+    o.stop(t + 0.25);
+    this.noiseBurst(t, 0.12, 600, 0.6, 'lowpass', 1);
   }
 
   dispose(): void {

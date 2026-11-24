@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { PLAYER_CONFIG, WEAPON_CONFIG } from '../config/GameConfig';
 import { damp, wrapAngle } from '../core/random';
+import { HitInfo } from '../combat/Damageable';
 import { CollisionWorld, PushResult } from '../world/Collision';
 
 /** 플레이어에게 전달되는 한 스텝의 조작 의도 (입력 장치와 무관) */
@@ -29,11 +30,53 @@ export class Player {
   aimDistance = 10;
   health = PLAYER_CONFIG.maxHealth;
   readonly maxHealth = PLAYER_CONFIG.maxHealth;
+  /** 남은 피격 무적 시간 */
+  invulnerable = 0;
+  dead = false;
+  /** 누적 받은 피해 · 막힌 공격 수 (테스트 · 디버그) */
+  damageTaken = 0;
+  blockedHits = 0;
+  /** 피해를 받은 순간 호출 (화면 효과 · 사운드) */
+  onDamaged: ((hit: HitInfo) => void) | null = null;
+  onDeath: (() => void) | null = null;
   readonly radius = PLAYER_CONFIG.radius;
   touchingWall = false;
   private readonly push: PushResult = { hit: false, nx: 0, nz: 0 };
 
   constructor(spawn: THREE.Vector3) {
+    this.teleport(spawn, Math.PI);
+  }
+
+  isAlive(): boolean {
+    return !this.dead;
+  }
+
+  /**
+   * 좀비 공격 피해. 무적 시간 중이거나 이미 죽었으면 무시.
+   * 여러 좀비가 같은 순간 때려도 첫 번째만 들어가고 나머지는 무적 시간에 막힌다.
+   */
+  receiveAttack(hit: HitInfo): boolean {
+    if (this.dead) return false;
+    if (this.invulnerable > 0) { this.blockedHits++; return false; }
+    this.health = Math.max(0, this.health - hit.damage);
+    this.damageTaken += hit.damage;
+    this.invulnerable = PLAYER_CONFIG.invulnerableTime;
+    this.onDamaged?.(hit);
+    if (this.health <= 0) {
+      this.dead = true;
+      this.velocity.set(0, 0, 0);
+      this.onDeath?.();
+    }
+    return true;
+  }
+
+  /** 다시 시작 */
+  revive(spawn: THREE.Vector3): void {
+    this.health = this.maxHealth;
+    this.invulnerable = 0;
+    this.dead = false;
+    this.damageTaken = 0;
+    this.blockedHits = 0;
     this.teleport(spawn, Math.PI);
   }
 
@@ -48,6 +91,8 @@ export class Player {
     const c = PLAYER_CONFIG;
     this.prevPosition.copy(this.position);
     this.prevAimYaw = this.aimYaw;
+    if (this.invulnerable > 0) this.invulnerable = Math.max(0, this.invulnerable - dt);
+    if (this.dead) return;
 
     // ── 이동: 목표 속도로 일정 가속/감속 (큰 관성 없음, 정지 시 미끄러짐 없음)
     let mx = cmd.moveX;

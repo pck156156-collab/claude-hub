@@ -25,6 +25,7 @@ const GUN_TIP_Z = 0.72;
 const GUN_POS = new THREE.Vector3(MUZ.x, MUZ.y - HIP_H, MUZ.z - GUN_TIP_Z);
 /** 상체 회전 (조준 자세에서 왼쪽 어깨가 앞으로) */
 const CHEST_TWIST = -0.35;
+const ZERO = new THREE.Vector3();
 
 const COLORS = {
   jacket: 0x4b5437, vest: 0x2a2d2e, pants: 0x34404f, boots: 0x2b2118, skin: 0xc79878, glove: 0x1e1e1e,
@@ -197,6 +198,28 @@ export class PlayerModel {
     this.update(0, { position: new THREE.Vector3(), aimYaw: 0, velocity: new THREE.Vector3(), aiming: false, reloading: false, reloadProgress: 0 });
   }
 
+  private hurt = 0;
+  private deathT = -1;
+  private readonly hurtColor = new THREE.Color(0xff2a1a);
+
+  /** 피격: 몸이 붉게 번쩍임 */
+  flashHurt(): void {
+    this.hurt = 1;
+  }
+
+  /** 사망 시작 / 해제 */
+  setDead(dead: boolean): void {
+    this.deathT = dead ? 0 : -1;
+    if (!dead) { this.root.rotation.x = 0; this.root.position.y = 0; this.hurt = 0; this.applyHurt(); }
+  }
+
+  private applyHurt(): void {
+    for (const m of this.materials) {
+      const sm = m as THREE.MeshStandardMaterial;
+      if (sm.isMeshStandardMaterial) { sm.emissive.copy(this.hurtColor); sm.emissiveIntensity = this.hurt * this.hurt * 0.45; }
+    }
+  }
+
   /** 사격 1회: 반동 충격 */
   kick(): void {
     const k = EFFECTS_CONFIG.recoilKick;
@@ -208,6 +231,20 @@ export class PlayerModel {
     this.time += dt;
     this.root.position.set(s.position.x, 0, s.position.z);
     this.root.rotation.y = s.aimYaw;
+    if (this.hurt > 0) { this.hurt = Math.max(0, this.hurt - dt * 7); this.applyHurt(); }
+    if (this.deathT >= 0) {
+      // 사망: 무릎이 꺾이며 옆으로 쓰러짐 (이동 애니메이션 정지)
+      this.deathT += dt;
+      const k = Math.min(1, this.deathT / 0.7);
+      const e = 1 - Math.pow(1 - k, 3);
+      this.root.rotation.set(0, s.aimYaw, 0);
+      this.root.rotateZ(e * 1.45);
+      this.root.position.y = e * 0.15;
+      this.aimMarker.visible = false;
+      s = { ...s, velocity: ZERO, aiming: false, reloading: false };
+    } else {
+      this.aimMarker.visible = true;
+    }
 
     // ── 이동 방향 → 하체 비틀림 · 걷기 주기
     const speed = Math.hypot(s.velocity.x, s.velocity.z);

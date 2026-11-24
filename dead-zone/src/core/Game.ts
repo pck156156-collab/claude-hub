@@ -1,12 +1,14 @@
 import * as THREE from 'three';
-import { CAMERA_CONFIG, DEFAULT_QUALITY, QUALITY_PRESETS, QualityLevel, RENDER_CONFIG, SIMULATION, TARGET_CONFIG, WEAPON_CONFIG } from '../config/GameConfig';
+import { CAMERA_CONFIG, DEFAULT_QUALITY, QUALITY_PRESETS, QualityLevel, RENDER_CONFIG, SIMULATION, WEAPON_CONFIG, ZOMBIE_TYPES } from '../config/GameConfig';
 import { GameCamera } from '../camera/GameCamera';
 import { DamageableRegistry, HitInfo } from '../combat/Damageable';
 import { Effects } from '../effects/Effects';
 import { Player } from '../player/Player';
 import { PlayerController } from '../player/PlayerController';
 import { PlayerModel } from '../player/PlayerModel';
-import { PracticeTarget } from '../targets/PracticeTarget';
+import { Zombie } from '../enemies/Zombie';
+import { ZombieManager } from '../enemies/ZombieManager';
+import { ZombieRenderer } from '../enemies/ZombieRenderer';
 import { DebugPanel } from '../ui/DebugPanel';
 import { GameUI } from '../ui/GameUI';
 import { ProjectileSystem } from '../weapons/Projectile';
@@ -15,7 +17,7 @@ import { World } from '../world/World';
 import { AudioManager } from './AudioManager';
 import { InputManager } from './InputManager';
 
-type State = 'start' | 'playing' | 'paused' | 'error';
+type State = 'start' | 'playing' | 'paused' | 'gameover' | 'error';
 
 /**
  * 게임 전체를 조립하고 루프를 돌린다.
@@ -34,7 +36,8 @@ export class Game {
   readonly controller: PlayerController;
   readonly weapon: Weapon;
   readonly registry = new DamageableRegistry();
-  readonly targets: PracticeTarget[] = [];
+  readonly zombies: ZombieManager;
+  readonly zombieRenderer: ZombieRenderer;
   readonly projectiles: ProjectileSystem;
   readonly effects: Effects;
   readonly ui = new GameUI();
@@ -54,6 +57,10 @@ export class Game {
   private readonly eject = new THREE.Vector3();
   private readonly hitInfo: HitInfo = { damage: 0, point: new THREE.Vector3(), direction: new THREE.Vector3(), sourceId: '' };
   private readonly cleanups: (() => void)[] = [];
+  /** 이번 판 생존 시간 (게임 오버 화면) */
+  playTime = 0;
+  /** 사망 후 게임 오버 화면을 띄우기까지 남은 시간 (쓰러지는 동작을 보여 줌) */
+  private gameOverDelay = 0;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
@@ -66,7 +73,7 @@ export class Game {
     this.renderer.toneMappingExposure = RENDER_CONFIG.exposure;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
 
-    this.world = new World(this.scene, TARGET_CONFIG.positions.map(([x, z]) => [x, z, 1.5] as [number, number, number]));
+    this.world = new World(this.scene);
     this.gameCamera = new GameCamera(window.innerWidth / window.innerHeight);
     this.input = new InputManager(canvas);
 
@@ -78,7 +85,8 @@ export class Game {
     this.projectiles = new ProjectileSystem(this.scene, this.world.collision, this.registry);
     this.effects = new Effects(this.scene);
 
-    this.createTargets();
+    this.zombies = new ZombieManager(this.world.collision, this.registry, this.player);
+    this.zombieRenderer = new ZombieRenderer(this.scene, ZOMBIE_TYPES.walker.appearance);
     this.wireEvents();
     this.gpuName = detectGpu(this.renderer);
     this.setQuality(loadQuality());
@@ -150,22 +158,48 @@ export class Game {
       const step = SIMULATION.fixedTimeStep;
       const cmd = this.controller.update(this.gameCamera.camera);
       this.accumulator += dt;
-      while (this.accumulator >= step) {
+      while (this.accumulator >= step && this.state === 'playing') {
         this.player.step(step, cmd, this.world.collision);
         this.weapon.update(step, this.controller.fire);
         this.projectiles.step(step);
-        for (const t of this.targets) t.step(step);
+        this.zombies.step(step, this.time, this.gameCamera.camera);
         this.time += step;
+        this.playTime += step;
         this.accumulator -= step;
       }
-      alpha = this.accumulator / step;
+      alpha = this.state === 'playing' ? this.accumulator / step : 1;
+    } else if (this.state === 'gameover') {
+      // 로직(이동 · 사격 · 좀비 AI · 생성)은 멈추고, 쓰러지는 연출만 진행
+      if (this.gameOverDelay > 0) {
+        this.gameOverDelay -= dt;
+        if (this.gameOverDelay <= 0) this.ui.showGameOver(this.zombies.kills, this.playTime);
+      }
     }
-    this.renderFrame(this.state === 'playing' ? dt : 0, alpha, draw);
+    const animate = this.state === 'playing' || this.state === 'gameover';
+    this.renderFrame(animate ? dt : 0, alpha, draw);
   }
 
   beginPlay(): void {
     this.audio.unlock();
     this.setState('playing');
+  }
+
+  /** 다시 시작: 페이지 새로고침 없이 이번 판 상태를 모두 초기화 */
+  restart(): void {
+    this.player.revive(this.world.spawnPoint);
+    this.model.setDead(false);
+    this.weapon.reset();
+    this.projectiles.clear();
+    this.effects.clear();
+    this.zombies.reset();
+    this.time = 0;
+    this.playTime = 0;
+    this.lastShotTime = -10;
+    this.spread = 0;
+    this.gameOverDelay = 0;
+    this.ui.setKills(0);
+    this.gameCamera.snap(this.player.position);
+    this.beginPlay();
   }
 
   pause(reason: string): void {
@@ -179,7 +213,7 @@ export class Game {
     this.input.dispose();
     this.projectiles.dispose();
     this.effects.dispose();
-    for (const t of this.targets) t.dispose();
+    this.zombieRenderer.dispose();
     this.model.dispose();
     this.world.dispose();
     this.audio.dispose();
@@ -248,24 +282,7 @@ export class Game {
     if (next === 'playing') this.ui.showScreen(null);
     else if (next === 'paused') { this.ui.showScreen('pause', reason); this.audio.suspend(); }
     else if (next === 'start') this.ui.showScreen('start');
-  }
-
-  private createTargets(): void {
-    for (const [x, z] of TARGET_CONFIG.positions) {
-      // 표적 정면이 맵 중앙을 향하도록
-      const t = new PracticeTarget(x, z, Math.atan2(-x, -z));
-      this.scene.add(t.root);
-      this.registry.add(t);
-      this.world.collision.addCircle(x, z, 0.5, 0.3); // 콘크리트 받침: 이동만 막고 총알은 지나감
-      t.onEvent = (target, e, hit) => {
-        if (e === 'destroyed' && hit) {
-          this.effects.explodeTarget(target.center(), hit.direction);
-          this.audio.breakTarget();
-          this.ui.flashHit(true);
-        }
-      };
-      this.targets.push(t);
-    }
+    else if (next === 'gameover') this.ui.showScreen(null);
   }
 
   private wireEvents(): void {
@@ -291,10 +308,10 @@ export class Game {
         h.point.copy(e.point);
         h.direction.copy(e.direction);
         h.sourceId = e.sourceId;
-        const alive = e.target.canBeHit();
         e.target.takeDamage(h);
-        this.effects.impactTarget(e.point, e.direction);
-        if (alive && e.target.canBeHit()) {
+        this.effects.impactFlesh(e.point, e.direction);
+        if (e.target instanceof Zombie) this.zombies.notifyDamaged(e.target);
+        if (e.target.canBeHit()) {
           this.ui.flashHit(false);
           this.audio.hit();
         }
@@ -311,6 +328,27 @@ export class Game {
       });
     };
 
+    // 좀비 처치 · 플레이어 피격 · 사망
+    this.zombies.onKilled = (z) => {
+      this.effects.zombieDeath(z.position);
+      this.audio.bodyFall();
+      this.ui.flashHit(true);
+      this.ui.setKills(this.zombies.kills);
+    };
+    this.player.onDamaged = () => {
+      this.ui.hurt();
+      this.model.flashHurt();
+      this.audio.hurt();
+    };
+    this.player.onDeath = () => {
+      this.state = 'gameover';
+      this.input.reset();
+      this.weapon.releaseTrigger();
+      this.model.setDead(true);
+      this.gameOverDelay = 1.3;
+      this.ui.showScreen(null);
+    };
+
     this.input.onPointerMove = (x, y) => this.ui.moveCursor(x, y);
     this.input.onPress('KeyR', () => { if (this.state === 'playing') this.weapon.requestReload(); });
     this.input.onPress('Escape', () => {
@@ -321,6 +359,7 @@ export class Game {
 
     this.ui.onStart = () => this.beginPlay();
     this.ui.onResume = () => this.beginPlay();
+    this.ui.onRestart = () => this.restart();
     this.ui.onQuality = (level) => this.setQuality(level);
 
     const onBlur = () => this.pause('게임 창이 포커스를 잃어 일시정지했습니다.');
@@ -370,7 +409,7 @@ export class Game {
     this.world.updateShadow(this.gameCamera.focus);
 
     this.projectiles.render(alpha);
-    for (const t of this.targets) t.update(dt);
+    this.zombieRenderer.update(dt, this.zombies.zombies, alpha, this.gameCamera.camera);
     this.effects.update(dt, this.gameCamera.camera);
 
     this.spread *= Math.exp(-6 * dt);
@@ -399,7 +438,9 @@ export class Game {
       ['발사 누적', String(this.weapon.shotsFired)],
       ['투사체', `${this.projectiles.activeCount} / 풀 ${this.projectiles.capacity}`],
       ['파티클', String(this.effects.particleCount)],
-      ['표적 파괴', String(this.targets.reduce((n, t) => n + t.destroyedCount, 0))],
+      ['체력', `${p.health}/${p.maxHealth}${p.invulnerable > 0 ? ' 무적' : ''} · 받은 피해 ${p.damageTaken} · 막힘 ${p.blockedHits}`],
+      ['좀비', `생존 ${this.zombies.aliveCount} · 시체 ${this.zombies.corpseCount} · 처치 ${this.zombies.kills} · 생성 ${this.zombies.spawned}`],
+      ['AI 시간', `${this.zombies.aiMs.toFixed(3)}ms / 스텝 · 경로 ${this.zombies.nav.lastBuildMs.toFixed(2)}ms (${this.zombies.nav.builds}회)`],
       ['렌더 배율', `${this.pixelRatio.toFixed(2)} (${this.renderer.domElement.width}×${this.renderer.domElement.height})`],
       ['드로우콜', String(info.render.calls)],
       ['삼각형', info.render.triangles.toLocaleString()],

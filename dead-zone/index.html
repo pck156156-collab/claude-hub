@@ -9,7 +9,11 @@
     <div id="app">
       <canvas id="game-canvas"></canvas>
 
+      <div id="damage-vignette" class="damage-vignette"></div>
       <div id="hud" class="hud">
+        <section class="hud-tc">
+          <div class="kills"><span>처치</span><b id="kill-count">0</b></div>
+        </section>
         <section class="hud-tl">
           <h1 class="title">PROJECT <span>DEAD ZONE</span></h1>
           <div class="health">
@@ -49,9 +53,9 @@
 
       <div id="screen-start" class="screen">
         <div class="panel">
-          <p class="kicker">ZOMBIE SURVIVAL · STAGE 1 PROTOTYPE</p>
+          <p class="kicker">ZOMBIE SURVIVAL · STAGE 2 PROTOTYPE</p>
           <h2>PROJECT <span>DEAD ZONE</span></h2>
-          <p class="lead">폐허가 된 도시. 연습용 표적으로 사격 감각을 익히세요.</p>
+          <p class="lead">폐허가 된 도시. 몰려오는 좀비를 처치하며 살아남으세요.</p>
           <ul class="howto">
             <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 화면 기준 이동</li>
             <li><kbd class="wide">마우스</kbd> 조준 — 이동 방향과 상관없이 커서를 바라봅니다</li>
@@ -71,6 +75,18 @@
           <div class="quality"><span>그래픽 품질</span><div class="quality-group"></div></div>
           <p class="quality-note">프레임이 낮으면 '낮음'을 선택하세요. 30FPS 에서 멈춰 있다면 브라우저 · 노트북의 절전 모드를 확인하세요.</p>
           <button id="btn-resume" type="button" class="btn">클릭하여 계속</button>
+        </div>
+      </div>
+
+      <div id="screen-gameover" class="screen screen-gameover" hidden>
+        <div class="panel">
+          <p class="kicker">YOU DIED</p>
+          <h2 class="gameover-title">GAME OVER</h2>
+          <dl class="result">
+            <div><dt>처치한 좀비</dt><dd id="go-kills">0</dd></div>
+            <div><dt>생존 시간</dt><dd id="go-time">0:00</dd></div>
+          </dl>
+          <button id="btn-restart" type="button" class="btn">다시 시작</button>
         </div>
       </div>
 
