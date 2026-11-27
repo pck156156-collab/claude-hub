@@ -33,6 +33,8 @@ export interface ZombieContext {
 }
 
 let nextId = 1;
+/** 이 넉백 속도 이상이면 공격 동작을 끊고 경직 */
+const HEAVY_KNOCKBACK = 4;
 const ray: RayHit = { t: 0, x: 0, z: 0, nx: 0, nz: 0, collider: null as never };
 const push: PushResult = { hit: false, nx: 0, nz: 0 };
 const dir = { x: 0, z: 0 };
@@ -85,6 +87,9 @@ export class Zombie implements Damageable {
   private lastHitReact = -10;
   /** 좀비 자신의 시간 (피격 반응 간격 계산용) */
   private clock = 0;
+  /** 최근에 맞은 공격 ID (중복 피해 방지) */
+  private readonly recentAttacks: number[] = [-1, -1, -1, -1, -1, -1, -1, -1];
+  private recentIndex = 0;
 
   get maxHealth(): number {
     return this.stats.maxHealth;
@@ -125,6 +130,8 @@ export class Zombie implements Damageable {
     this.sidestep = 0;
     this.sidestepTimer = 0;
     this.lastHitReact = -10;
+    this.recentAttacks.fill(-1);
+    this.recentIndex = 0;
     this.syncHitShape();
   }
 
@@ -138,14 +145,28 @@ export class Zombie implements Damageable {
   takeDamage(hit: HitInfo): void {
     const time = this.clock;
     if (!this.canBeHit()) return;
+    // 같은 공격(같은 공격 ID)으로는 한 번만 피해
+    if (hit.attackId !== undefined) {
+      if (this.recentAttacks.includes(hit.attackId)) return;
+      this.recentAttacks[this.recentIndex] = hit.attackId;
+      this.recentIndex = (this.recentIndex + 1) % this.recentAttacks.length;
+    }
     this.health = Math.max(0, this.health - hit.damage);
     this.flash = 1;
     this.hitKick = 1;
-    const k = this.stats.knockback;
+    const resist = Math.min(1, Math.max(0, this.stats.knockbackResistance ?? 0));
+    const k = (hit.knockback ?? this.stats.knockback) * (1 - resist);
     this.knockX += hit.direction.x * k;
     this.knockZ += hit.direction.z * k;
     if (this.health <= 0) {
       this.setState(ZombieState.Dead);
+      return;
+    }
+    // 강한 넉백(방망이 · 도끼): 공격 동작도 끊고 경직
+    if (k >= HEAVY_KNOCKBACK && (this.state === ZombieState.Chase || this.state === ZombieState.Attack)) {
+      this.lastHitReact = time;
+      this.setState(ZombieState.Hit);
+      this.stateTime = -0.15; // 경직 조금 더 길게
       return;
     }
     // 추적 중일 때만 짧게 경직. 연속 피격 시 상태가 계속 바뀌어 떨리지 않도록 간격을 둔다.

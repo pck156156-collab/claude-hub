@@ -32,7 +32,12 @@
         </section>
 
         <section class="hud-br">
-          <div class="weapon-name" id="weapon-name">M-17 자동소총</div>
+          <div class="loadout" aria-label="장착 무기">
+            <div class="slot" id="slot-0"><kbd>1</kbd><span class="s-name"></span><span class="s-ammo"></span><span class="s-mastery"></span><i class="s-bar"></i></div>
+            <div class="slot" id="slot-1"><kbd>2</kbd><span class="s-name"></span><span class="s-ammo"></span><span class="s-mastery"></span><i class="s-bar"></i></div>
+            <div class="slot melee-slot" id="melee-slot"><kbd>F</kbd><span class="s-name"></span><span class="s-ammo">근접</span><span class="s-mastery"></span><i class="s-bar"></i></div>
+          </div>
+          <div class="weapon-name" id="weapon-name">AR-12 돌격소총</div>
           <div class="ammo">
             <b id="ammo-current">30</b><span class="sep">/</span><span id="ammo-max">30</span>
           </div>
@@ -52,7 +57,8 @@
           <ul class="controls">
             <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 이동</li>
             <li><kbd class="wide">마우스 좌클릭</kbd> 사격 (누르고 있으면 연사)</li>
-            <li><kbd>R</kbd> 재장전</li>
+            <li><kbd>R</kbd> 재장전 · <kbd>F</kbd> 근접 공격</li>
+            <li><kbd>1</kbd><kbd>2</kbd> / 휠 총기 교체</li>
             <li class="muted"><kbd>ESC</kbd> 일시정지 · <kbd>F3</kbd> 디버그 · <kbd>M</kbd> 소리</li>
           </ul>
         </section>
@@ -62,6 +68,8 @@
         <div class="wb-wave">WAVE <span id="wb-num">1</span></div>
         <div class="wb-sub">SURVIVE!</div>
       </div>
+
+      <div id="toast" class="toast" aria-live="polite"></div>
 
       <div id="crosshair" class="crosshair">
         <div class="ch-ring"></div>
@@ -75,14 +83,15 @@
 
       <div id="screen-start" class="screen">
         <div class="panel">
-          <p class="kicker">ZOMBIE SURVIVAL · STAGE 2 PROTOTYPE</p>
+          <p class="kicker">ZOMBIE SURVIVAL · STAGE 5 PROTOTYPE</p>
           <h2>PROJECT <span>DEAD ZONE</span></h2>
-          <p class="lead">폐허가 된 도시. 몰려오는 좀비를 처치하며 살아남으세요.</p>
+          <p class="lead">폐허가 된 도시. 총 두 자루와 근접 무기로 좀비를 처치하며 살아남으세요.</p>
           <ul class="howto">
             <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 화면 기준 이동</li>
             <li><kbd class="wide">마우스</kbd> 조준 — 이동 방향과 상관없이 커서를 바라봅니다</li>
             <li><kbd class="wide">좌클릭</kbd> 사격 · 누르고 있으면 연사</li>
             <li><kbd>R</kbd> 재장전 (탄창을 다 쓰면 자동 재장전)</li>
+            <li><kbd>F</kbd> 근접 공격 · <kbd>1</kbd><kbd>2</kbd> 또는 마우스 휠로 총기 교체</li>
           </ul>
           <div class="quality"><span>그래픽 품질</span><div class="quality-group"></div></div>
           <p class="quality-note">프레임이 낮으면 '낮음'을 선택하세요. 30FPS 에서 멈춰 있다면 브라우저 · 노트북의 절전 모드를 확인하세요.</p>
@@ -105,7 +114,9 @@
           <p class="lv-title">LEVEL UP!</p>
           <p class="lv-sub">레벨 <b id="lv-level">2</b> · 강화를 하나 선택하세요<span id="lv-more"></span></p>
           <div class="cards" id="lv-cards"></div>
-          <p class="lv-hint">카드를 클릭하거나 <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> 키로 선택</p>
+          <p class="lv-equipped" id="lv-equipped" hidden></p>
+          <p class="lv-hint" id="lv-hint">카드를 클릭하거나 <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> 키로 선택</p>
+          <button type="button" class="btn-decline" id="lv-decline" hidden>획득하지 않음</button>
         </div>
       </div>
 
@@ -122,6 +133,7 @@
             <div><dt>최종 레벨</dt><dd id="go-level">1</dd></div>
             <div><dt>획득한 강화</dt><dd id="go-upgrades">0종</dd></div>
           </dl>
+          <p class="best" id="go-weapons"></p>
           <p class="best" id="go-best">최고 기록 — 생존 00:00 · 웨이브 1 · 처치 0</p>
           <button id="btn-restart" type="button" class="btn">다시 시작</button>
         </div>

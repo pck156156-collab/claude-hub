@@ -1,19 +1,29 @@
 import * as THREE from 'three';
+import { WEAPON_CONFIG } from '../config/GameConfig';
+import { GunDef, GunId } from './WeaponData';
 
-/** 무기 수치. config/GameConfig.ts 의 WEAPON_CONFIG 항목과 같은 형태 */
+/** 총기 최종 능력치 (기본값 + 강화 + 숙련도 → StatCalculator.computeGunStats) */
 export interface WeaponStats {
-  id: string;
+  id: GunId;
   name: string;
-  magazineSize: number;
+  damage: number;
+  pellets: number;
   fireRate: number;
+  auto: boolean;
+  magazineSize: number;
   reloadTime: number;
   projectileSpeed: number;
   range: number;
-  damage: number;
   spreadDeg: number;
-  autoReloadOnEmpty: boolean;
+  moveSpreadDeg: number;
+  pelletConeDeg: number;
+  falloffStart: number;
+  falloffEnd: number;
+  minFalloff: number;
+  knockback: number;
   /** 추가 관통 수 (강화) */
-  pierce?: number;
+  pierce: number;
+  autoReloadOnEmpty: boolean;
 }
 
 /** 무기를 들고 있는 대상이 제공하는 총구 정보 (플레이어 · 향후 다른 사수) */
@@ -21,8 +31,10 @@ export interface WeaponSocket {
   getMuzzle(outPos: THREE.Vector3, outDir: THREE.Vector3): void;
 }
 
+/** 방아쇠 1회분 발사 (산탄은 GunShooter 가 여러 발로 나눈다) */
 export interface ShotEvent {
   origin: THREE.Vector3;
+  /** 조준 방향 (퍼짐 적용 전) */
   direction: THREE.Vector3;
   stats: WeaponStats;
   /** 이번 스텝 안에서 발사 시점 이후 이미 흐른 시간 (저프레임에서도 탄 간격 유지) */
@@ -30,15 +42,28 @@ export interface ShotEvent {
 }
 
 export interface WeaponListener {
-  onFire?(shot: ShotEvent): void;
-  onReloadStart?(): void;
-  onReloadEnd?(): void;
-  onDryFire?(): void;
+  onFire?(shot: ShotEvent, weapon: Weapon): void;
+  onReloadStart?(weapon: Weapon): void;
+  onReloadEnd?(weapon: Weapon): void;
+  onReloadCancel?(weapon: Weapon): void;
+  onDryFire?(weapon: Weapon): void;
+}
+
+/** 무기 데이터 → 강화가 없는 최종 능력치 형태 */
+export function statsFromDef(def: GunDef): WeaponStats {
+  return {
+    id: def.id, name: def.name, damage: def.damage, pellets: def.pellets, fireRate: def.fireRate, auto: def.auto,
+    magazineSize: def.magazineSize, reloadTime: def.reloadTime, projectileSpeed: def.projectileSpeed, range: def.range,
+    spreadDeg: def.spreadDeg, moveSpreadDeg: def.moveSpreadDeg, pelletConeDeg: def.pelletConeDeg,
+    falloffStart: def.falloffStart, falloffEnd: def.falloffEnd, minFalloff: def.minFalloff, knockback: def.knockback,
+    pierce: 0, autoReloadOnEmpty: WEAPON_CONFIG.autoReloadOnEmpty,
+  };
 }
 
 /**
- * 총기 상태 머신: 발사 간격 · 탄약 · 재장전.
- * 투사체를 직접 만들지 않고 onFire 이벤트만 낸다 → 투사체 · 이펙트 · 사운드가 각자 구독.
+ * 총기 1정의 상태 머신: 발사 간격 · 탄약 · 재장전 · 자동/반자동.
+ * 총기마다 인스턴스가 하나씩 있어 탄약 · 쿨다운이 따로 보존된다 (교체해도 유지).
+ * 투사체를 직접 만들지 않고 onFire 이벤트만 낸다.
  */
 export class Weapon {
   ammo: number;
@@ -47,19 +72,23 @@ export class Weapon {
   /** 다음 발사까지 남은 시간 (음수면 발사 가능, 누적 보정용) */
   private cooldown = 0;
   private triggerWasDown = false;
+  /** 반자동: 발사 간격 직전에 누른 클릭을 기억 */
+  private queuedShot = false;
   private readonly listeners: WeaponListener[] = [];
   private readonly shot: ShotEvent;
-  private readonly tmpAxis = new THREE.Vector3(0, 1, 0);
   /** 누적 발사 수 (테스트 · 디버그용) */
   shotsFired = 0;
-
-  /** 현재 능력치 (기본값 + 강화). 기본값은 baseStats 에 보존 */
+  /** 현재 능력치 (기본값 + 강화 + 숙련도). 기본값은 def 에 보존 */
   stats: WeaponStats;
 
-  constructor(readonly baseStats: WeaponStats, private readonly socket: WeaponSocket, private readonly random: () => number = Math.random) {
-    this.stats = { ...baseStats };
-    this.ammo = baseStats.magazineSize;
+  constructor(readonly def: GunDef, private readonly socket: WeaponSocket) {
+    this.stats = statsFromDef(def);
+    this.ammo = def.magazineSize;
     this.shot = { origin: new THREE.Vector3(), direction: new THREE.Vector3(), stats: this.stats, elapsed: 0 };
+  }
+
+  get id(): GunId {
+    return this.def.id;
   }
 
   addListener(l: WeaponListener): void {
@@ -75,15 +104,32 @@ export class Weapon {
     return this.reloading ? 1 - this.reloadTimer / this.stats.reloadTime : 0;
   }
 
+  /** 다음 발사까지 남은 비율 0~1 (HUD) */
+  get cooldownRatio(): number {
+    return Math.max(0, Math.min(1, this.cooldown / this.fireInterval));
+  }
+
   requestReload(): boolean {
     if (this.reloading || this.ammo >= this.stats.magazineSize) return false;
     this.reloading = true;
     this.reloadTimer = this.stats.reloadTime;
-    for (const l of this.listeners) l.onReloadStart?.();
+    for (const l of this.listeners) l.onReloadStart?.(this);
     return true;
   }
 
-  update(dt: number, triggerDown: boolean): void {
+  /** 재장전 취소: 남은 탄약은 그대로 (교체 · 근접 공격 시) */
+  cancelReload(): void {
+    if (!this.reloading) return;
+    this.reloading = false;
+    this.reloadTimer = 0;
+    for (const l of this.listeners) l.onReloadCancel?.(this);
+  }
+
+  /**
+   * @param triggerDown 방아쇠 (좌클릭)
+   * @param allowFire 교체 · 근접 공격 중이면 false (재장전 · 쿨다운은 계속 진행)
+   */
+  update(dt: number, triggerDown: boolean, allowFire = true): void {
     const pressed = triggerDown && !this.triggerWasDown;
     this.triggerWasDown = triggerDown;
 
@@ -93,11 +139,38 @@ export class Weapon {
         this.reloading = false;
         this.reloadTimer = 0;
         this.ammo = this.stats.magazineSize;
-        for (const l of this.listeners) l.onReloadEnd?.();
+        for (const l of this.listeners) l.onReloadEnd?.(this);
       }
     }
 
     this.cooldown -= dt;
+    if (!allowFire) {
+      this.queuedShot = false;
+      if (this.cooldown < 0) this.cooldown = 0;
+      return;
+    }
+
+    if (!this.stats.auto) {
+      // 반자동: 클릭당 1발. 간격이 거의 끝났을 때 누른 클릭은 기억했다가 쏜다
+      if (pressed) {
+        if (this.ammo <= 0 && !this.reloading) {
+          for (const l of this.listeners) l.onDryFire?.(this);
+          if (this.stats.autoReloadOnEmpty) this.requestReload();
+        } else if (this.cooldown <= WEAPON_CONFIG.semiAutoBuffer) {
+          this.queuedShot = true;
+        }
+      }
+      if (this.queuedShot && this.cooldown <= 0 && !this.reloading && this.ammo > 0) {
+        this.queuedShot = false;
+        this.fireOne(-this.cooldown);
+        this.cooldown = Math.max(0, this.cooldown) + this.fireInterval;
+      }
+      if (this.reloading) this.queuedShot = false;
+      if (this.cooldown < 0) this.cooldown = 0;
+      if (this.ammo === 0 && this.stats.autoReloadOnEmpty) this.requestReload();
+      return;
+    }
+
     if (!triggerDown || this.reloading) {
       // 방아쇠를 놓은 동안 발사 가능 상태가 쌓이지 않도록
       if (this.cooldown < 0) this.cooldown = 0;
@@ -106,7 +179,7 @@ export class Weapon {
 
     if (this.ammo <= 0) {
       if (pressed) {
-        for (const l of this.listeners) l.onDryFire?.();
+        for (const l of this.listeners) l.onDryFire?.(this);
         if (this.stats.autoReloadOnEmpty) this.requestReload();
       }
       if (this.cooldown < 0) this.cooldown = 0;
@@ -124,30 +197,33 @@ export class Weapon {
   }
 
   /**
-   * 강화로 바뀐 능력치 적용. 탄창이 커지면 늘어난 만큼 탄을 채워 주고, 줄면 넘치는 탄을 버린다.
+   * 최종 능력치 적용. 탄창이 커지면 늘어난 만큼 탄을 채워 주고, 줄면 넘치는 탄을 버린다.
    * 발사 간격 · 재장전 시간은 다음 발사 · 다음 재장전부터 반영된다.
    */
-  applyStats(over: Partial<WeaponStats>): void {
+  applyStats(next: WeaponStats): void {
     const oldMag = this.stats.magazineSize;
-    this.stats = { ...this.baseStats, ...over };
-    this.shot.stats = this.stats;
-    const diff = this.stats.magazineSize - oldMag;
-    if (!this.reloading) this.ammo = Math.max(0, Math.min(this.stats.magazineSize, this.ammo + Math.max(0, diff)));
-    else this.ammo = Math.min(this.ammo, this.stats.magazineSize);
+    this.stats = next;
+    this.shot.stats = next;
+    const diff = next.magazineSize - oldMag;
+    if (!this.reloading) this.ammo = Math.max(0, Math.min(next.magazineSize, this.ammo + Math.max(0, diff)));
+    else this.ammo = Math.min(this.ammo, next.magazineSize);
   }
 
-  /** 다시 시작: 탄창 가득 · 재장전 취소 */
+  /** 새로 얻었거나 다시 시작: 탄창 가득 · 재장전 취소 */
   reset(): void {
     this.ammo = this.stats.magazineSize;
     this.reloading = false;
     this.reloadTimer = 0;
     this.cooldown = 0;
     this.triggerWasDown = false;
+    this.queuedShot = false;
+    this.shotsFired = 0;
   }
 
-  /** 상태 초기화 (일시정지 해제 등) */
+  /** 입력 상태만 초기화 (일시정지 해제 · 교체 등) */
   releaseTrigger(): void {
     this.triggerWasDown = false;
+    this.queuedShot = false;
   }
 
   private fireOne(elapsed: number): void {
@@ -155,11 +231,7 @@ export class Weapon {
     this.shotsFired++;
     const s = this.shot;
     this.socket.getMuzzle(s.origin, s.direction);
-    if (this.stats.spreadDeg > 0) {
-      const spread = THREE.MathUtils.degToRad(this.stats.spreadDeg) * (this.random() * 2 - 1);
-      s.direction.applyAxisAngle(this.tmpAxis, spread);
-    }
     s.elapsed = elapsed;
-    for (const l of this.listeners) l.onFire?.(s);
+    for (const l of this.listeners) l.onFire?.(s, this);
   }
 }

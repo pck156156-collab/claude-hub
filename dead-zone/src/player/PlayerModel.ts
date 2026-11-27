@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { EFFECTS_CONFIG, PLAYER_CONFIG, WEAPON_CONFIG } from '../config/GameConfig';
 import { clamp, damp, wrapAngle } from '../core/random';
+import { GUNS, GunId, MELEE, MeleeId, MeleeStyle } from '../weapons/WeaponData';
 
 /** 애니메이션에 필요한 상태 (게임 로직 → 시각 계층, 한 방향) */
 export interface PlayerVisualState {
@@ -11,6 +12,31 @@ export interface PlayerVisualState {
   aiming: boolean;
   reloading: boolean;
   reloadProgress: number;
+  /** 들고 있는 총 · 교체 전 총 · 교체 진행도(0~1, 교체 중 아니면 -1) */
+  gunId: GunId;
+  switchFrom: GunId | null;
+  switchProgress: number;
+  /** 근접 무기 · 휘두르기 진행도(0~1, 아니면 -1) · 그 무기 · 타격 순간 비율 */
+  meleeId: MeleeId;
+  meleeProgress: number;
+  swingId: MeleeId;
+  swingHitFraction: number;
+}
+
+/** 총기 모델: 총구는 모두 같은 위치(GUN_TIP_Z), 손 위치 · 탄창 위치만 다르다 */
+interface GunModel {
+  group: THREE.Group;
+  mag: THREE.Mesh;
+  grip: THREE.Vector3;
+  support: THREE.Vector3;
+  magwell: THREE.Vector3;
+}
+
+interface MeleeModel {
+  group: THREE.Group;
+  /** 들고 있지 않을 때 위치 (상체 좌표) · 회전 */
+  holsterPos: THREE.Vector3;
+  holsterRot: THREE.Euler;
 }
 
 // ── 치수 (단위: m). 발바닥 = y 0
@@ -20,7 +46,7 @@ const SHIN = 0.42;
 const UPPER_ARM = 0.32;
 const FOREARM = 0.31;
 /** 상체 기준 소총 위치: 총구 = muzzleOffset 이 되도록 맞춘다 */
-const MUZ = WEAPON_CONFIG.rifle.muzzleOffset;
+const MUZ = WEAPON_CONFIG.muzzleOffset;
 const GUN_TIP_Z = 0.72;
 const GUN_POS = new THREE.Vector3(MUZ.x, MUZ.y - HIP_H, MUZ.z - GUN_TIP_Z);
 /** 상체 회전 (조준 자세에서 왼쪽 어깨가 앞으로) */
@@ -46,8 +72,13 @@ export class PlayerModel {
   private readonly chest = new THREE.Group();
   private readonly head = new THREE.Group();
   private readonly gun = new THREE.Group();
-  private readonly gunMag: THREE.Mesh;
+  private readonly gunModels = {} as Record<GunId, GunModel>;
+  private readonly meleeModels = {} as Record<MeleeId, MeleeModel>;
+  private shownGun: GunId = 'ar12';
+  private shownMelee: MeleeId = 'knife';
+  private gunMag!: THREE.Mesh;
   private readonly handMag: THREE.Mesh;
+  private meleeBlend = 0;
   private readonly legs: { thigh: THREE.Group; knee: THREE.Group; foot: THREE.Mesh }[] = [];
   private readonly arms: ArmRig[] = [];
   private readonly aimMarker: THREE.Mesh;
@@ -70,7 +101,6 @@ export class PlayerModel {
   // 재사용 임시 객체
   private readonly v1 = new THREE.Vector3();
   private readonly v2 = new THREE.Vector3();
-  private readonly v3 = new THREE.Vector3();
   private readonly v4 = new THREE.Vector3();
   private readonly up = new THREE.Vector3(0, 1, 0);
   private readonly m4 = new THREE.Matrix4();
@@ -81,6 +111,9 @@ export class PlayerModel {
   private readonly kHand = new THREE.Vector3();
   private readonly kElbow = new THREE.Vector3();
   private readonly kPole = new THREE.Vector3();
+  private readonly kShoulder = new THREE.Vector3();
+  private readonly kMeleeHand = new THREE.Vector3();
+  private readonly kMeleeDir = new THREE.Vector3();
   private readonly reloadKeys: [number, THREE.Vector3][] = [0, 0.16, 0.3, 0.48, 0.66, 0.78, 0.9, 1].map((t) => [t, this.kHandguard]);
 
   constructor() {
@@ -150,24 +183,128 @@ export class PlayerModel {
     mesh(box(0.08, 0.035, 0.02), M.gunMetal, this.head, 0.045, -0.005, 0.12); // 고글 렌즈
     mesh(box(0.08, 0.035, 0.02), M.gunMetal, this.head, -0.045, -0.005, 0.12);
 
-    // ── 소총 (상체 기준, 비틀림 없음 → 항상 조준 방향)
+    // ── 총기 5종 (상체 기준, 비틀림 없음 → 항상 조준 방향). 보이는 것만 visible
     this.gun.position.copy(GUN_POS);
     this.upper.add(this.gun);
-    mesh(box(0.065, 0.11, 0.42), M.gunMetal, this.gun, 0, 0, 0.1); // 몸통
-    mesh(box(0.07, 0.085, 0.27), M.gunFurniture, this.gun, 0, -0.005, 0.44); // 총열 덮개
-    const barrel = mesh(geo(new THREE.CylinderGeometry(0.016, 0.016, 0.18, 8).rotateX(Math.PI / 2)), M.gunMetal, this.gun, 0, 0.012, GUN_TIP_Z - 0.09);
-    barrel.castShadow = false;
-    mesh(box(0.035, 0.035, 0.05), M.gunMetal, this.gun, 0, 0.012, GUN_TIP_Z - 0.02); // 소염기
-    mesh(box(0.055, 0.12, 0.26), M.gunFurniture, this.gun, 0, -0.03, -0.22); // 개머리판
-    mesh(box(0.04, 0.11, 0.05), M.gunFurniture, this.gun, 0, -0.1, -0.02).rotation.x = -0.35; // 손잡이
-    mesh(box(0.05, 0.05, 0.11), M.gunMetal, this.gun, 0, 0.085, 0.06); // 조준경
-    mesh(box(0.012, 0.05, 0.01), M.gunMetal, this.gun, 0, 0.065, GUN_TIP_Z - 0.18); // 가늠쇠
-    this.gunMag = mesh(box(0.045, 0.17, 0.08), M.gunMetal, this.gun, 0, -0.12, 0.13);
-    this.gunMag.rotation.x = 0.22;
+    const M2 = {
+      ...M,
+      wood: mat(0x6e4a2c, 0.75), olive: mat(0x3f4a2c, 0.8), polymer: mat(0x2b2d2f, 0.6), shell: mat(0x9b2a20, 0.6),
+      steel: mat(0xb9bec4, 0.3, 0.85), red: mat(0x9e1c17, 0.55), handle: mat(0x3a2a1c, 0.8), tape: mat(0x22252a, 0.95),
+    };
+    const cyl = (r: number, len: number) => geo(new THREE.CylinderGeometry(r, r, len, 10).rotateX(Math.PI / 2));
+    const gunModel = (id: GunId, build: (g: THREE.Group) => THREE.Mesh, grip: number[], support: number[], magwell: number[]) => {
+      const g = new THREE.Group();
+      g.visible = false;
+      this.gun.add(g);
+      const mag = build(g);
+      this.gunModels[id] = { group: g, mag, grip: new THREE.Vector3(...grip), support: new THREE.Vector3(...support), magwell: new THREE.Vector3(...magwell) };
+    };
+    // AR-12: 기존 자동소총
+    gunModel('ar12', (g) => {
+      mesh(box(0.065, 0.11, 0.42), M.gunMetal, g, 0, 0, 0.1);
+      mesh(box(0.07, 0.085, 0.27), M.gunFurniture, g, 0, -0.005, 0.44);
+      mesh(cyl(0.016, 0.18), M.gunMetal, g, 0, 0.012, GUN_TIP_Z - 0.09).castShadow = false;
+      mesh(box(0.035, 0.035, 0.05), M.gunMetal, g, 0, 0.012, GUN_TIP_Z - 0.02);
+      mesh(box(0.055, 0.12, 0.26), M.gunFurniture, g, 0, -0.03, -0.22);
+      mesh(box(0.04, 0.11, 0.05), M.gunFurniture, g, 0, -0.1, -0.02).rotation.x = -0.35;
+      mesh(box(0.05, 0.05, 0.11), M.gunMetal, g, 0, 0.085, 0.06);
+      mesh(box(0.012, 0.05, 0.01), M.gunMetal, g, 0, 0.065, GUN_TIP_Z - 0.18);
+      mesh(box(0.02, 0.02, 0.5), M.strap, g, 0.04, -0.06, 0.05);
+      const mag = mesh(box(0.045, 0.17, 0.08), M.gunMetal, g, 0, -0.12, 0.13);
+      mag.rotation.x = 0.22;
+      return mag;
+    }, [0, -0.075, 0.03], [0, -0.05, 0.36], [0.02, -0.14, 0.13]);
+    // P9 권총: 짧은 총, 두 손으로 앞으로 뻗어 잡음
+    gunModel('p9', (g) => {
+      mesh(box(0.042, 0.055, 0.21), M2.polymer, g, 0, 0.012, 0.615); // 슬라이드
+      mesh(box(0.038, 0.035, 0.17), M.gunMetal, g, 0, -0.028, 0.605); // 프레임
+      mesh(box(0.038, 0.11, 0.05), M2.polymer, g, 0, -0.085, 0.545).rotation.x = -0.22; // 손잡이
+      mesh(box(0.008, 0.016, 0.008), M.gunMetal, g, 0, 0.046, GUN_TIP_Z - 0.02); // 가늠쇠
+      mesh(box(0.02, 0.012, 0.012), M.gunMetal, g, 0, 0.046, 0.53);
+      const mag = mesh(box(0.032, 0.035, 0.04), M.gunMetal, g, 0, -0.15, 0.53);
+      return mag;
+    }, [0, -0.085, 0.545], [0.035, -0.095, 0.56], [0, -0.16, 0.53]);
+    // Viper SMG: 짧고 각진 몸통, 긴 탄창, 앞손잡이
+    gunModel('viper', (g) => {
+      mesh(box(0.06, 0.09, 0.32), M2.polymer, g, 0, 0, 0.38);
+      mesh(box(0.055, 0.065, 0.1), M.gunMetal, g, 0, 0.005, 0.6);
+      mesh(cyl(0.014, 0.1), M.gunMetal, g, 0, 0.01, GUN_TIP_Z - 0.05);
+      mesh(box(0.035, 0.09, 0.04), M2.polymer, g, 0, -0.085, 0.27).rotation.x = -0.3; // 손잡이
+      mesh(box(0.03, 0.08, 0.035), M2.polymer, g, 0, -0.08, 0.58); // 앞손잡이
+      mesh(box(0.012, 0.012, 0.22), M.gunMetal, g, 0.022, 0.015, 0.11); // 접이식 개머리
+      mesh(box(0.012, 0.012, 0.22), M.gunMetal, g, -0.022, 0.015, 0.11);
+      mesh(box(0.05, 0.07, 0.012), M.gunMetal, g, 0, -0.01, 0.0);
+      mesh(box(0.04, 0.04, 0.08), M.gunMetal, g, 0, 0.065, 0.36); // 조준기
+      const mag = mesh(box(0.032, 0.22, 0.045), M.gunMetal, g, 0, -0.15, 0.44);
+      mag.rotation.x = 0.08;
+      return mag;
+    }, [0, -0.09, 0.27], [0, -0.115, 0.58], [0, -0.06, 0.44]);
+    // Bulldog 샷건: 긴 총열 + 튜브 탄창 + 나무 펌프 · 개머리
+    gunModel('bulldog', (g) => {
+      mesh(box(0.07, 0.1, 0.26), M.gunMetal, g, 0, 0, 0.07);
+      mesh(cyl(0.024, 0.5), M.gunMetal, g, 0, 0.022, 0.47);
+      mesh(cyl(0.02, 0.44), M.gunMetal, g, 0, -0.03, 0.42);
+      mesh(box(0.068, 0.06, 0.17), M2.wood, g, 0, -0.03, 0.46); // 펌프
+      mesh(box(0.058, 0.13, 0.3), M2.wood, g, 0, -0.035, -0.2);
+      mesh(box(0.04, 0.1, 0.05), M2.wood, g, 0, -0.09, -0.02).rotation.x = -0.4;
+      mesh(box(0.01, 0.015, 0.01), M.gunMetal, g, 0, 0.05, GUN_TIP_Z - 0.02); // 비드
+      const mag = mesh(box(0.024, 0.024, 0.065), M2.shell, g, 0.0, -0.07, 0.11); // 장전 중인 산탄
+      return mag;
+    }, [0, -0.08, -0.02], [0, -0.065, 0.46], [0, -0.08, 0.11]);
+    // Titan LMG: 두꺼운 몸통, 옆 탄통, 손잡이, 접은 양각대
+    gunModel('titan', (g) => {
+      mesh(box(0.09, 0.13, 0.46), M2.olive, g, 0, 0, 0.1);
+      mesh(box(0.075, 0.075, 0.24), M.gunMetal, g, 0, 0.01, 0.46); // 총열 덮개
+      mesh(cyl(0.02, 0.14), M.gunMetal, g, 0, 0.012, GUN_TIP_Z - 0.07);
+      mesh(box(0.045, 0.04, 0.05), M.gunMetal, g, 0, 0.012, GUN_TIP_Z - 0.02);
+      mesh(box(0.02, 0.06, 0.16), M.gunMetal, g, 0, 0.11, 0.15); // 손잡이 기둥
+      mesh(box(0.03, 0.02, 0.18), M.gunMetal, g, 0, 0.14, 0.15);
+      mesh(box(0.07, 0.13, 0.25), M2.olive, g, 0, -0.03, -0.22);
+      mesh(box(0.045, 0.1, 0.05), M2.polymer, g, 0, -0.1, -0.03).rotation.x = -0.35;
+      mesh(box(0.012, 0.012, 0.26), M.gunMetal, g, 0.02, -0.04, 0.48); // 양각대
+      mesh(box(0.012, 0.012, 0.26), M.gunMetal, g, -0.02, -0.04, 0.48);
+      mesh(box(0.012, 0.12, 0.012), M.strap, g, 0.0, -0.02, 0.32).rotation.x = 0.4; // 탄띠
+      const mag = mesh(box(0.11, 0.13, 0.14), M2.olive, g, 0.07, -0.1, 0.12); // 탄통
+      return mag;
+    }, [0, -0.09, -0.03], [0, -0.07, 0.42], [0.07, -0.08, 0.12]);
+    this.setGunModel('ar12');
     this.handMag = mesh(box(0.045, 0.17, 0.08), M.gunMetal, this.upper);
     this.handMag.visible = false;
-    // 멜빵
-    mesh(box(0.02, 0.02, 0.5), M.strap, this.gun, 0.04, -0.06, 0.05);
+
+    // ── 근접 무기 4종 (길이 방향 +Y, 손잡이 끝이 원점). 들고 있지 않을 때는 허리 · 등에
+    const meleeModel = (id: MeleeId, holster: number[], rot: number[], build: (g: THREE.Group) => void) => {
+      const g = new THREE.Group();
+      g.visible = false;
+      build(g);
+      this.upper.add(g);
+      this.meleeModels[id] = { group: g, holsterPos: new THREE.Vector3(...holster), holsterRot: new THREE.Euler(...rot) };
+    };
+    meleeModel('knife', [0.21, 0.02, 0.08], [Math.PI + 0.2, 0, 0.1], (g) => {
+      mesh(box(0.03, 0.1, 0.03), M2.handle, g, 0, 0.05, 0);
+      mesh(box(0.07, 0.014, 0.034), M.gunMetal, g, 0, 0.105, 0);
+      const blade = mesh(box(0.01, 0.17, 0.034), M2.steel, g, 0, 0.195, 0);
+      blade.scale.set(1, 1, 1);
+      mesh(box(0.009, 0.04, 0.02), M2.steel, g, 0, 0.29, -0.006); // 끝
+    });
+    meleeModel('machete', [0.21, -0.02, -0.04], [Math.PI + 0.1, 0, 0.12], (g) => {
+      mesh(box(0.032, 0.13, 0.034), M2.handle, g, 0, 0.065, 0);
+      mesh(box(0.012, 0.44, 0.065), M2.steel, g, 0, 0.35, 0.006);
+      mesh(box(0.012, 0.1, 0.08), M2.steel, g, 0, 0.53, 0.014); // 넓은 끝
+    });
+    meleeModel('bat', [0.08, 0.25, -0.27], [0.1, 0, 2.5], (g) => {
+      mesh(geo(new THREE.CylinderGeometry(0.03, 0.03, 0.025, 10)), M2.handle, g, 0, 0.012, 0); // 손잡이 끝
+      mesh(geo(new THREE.CylinderGeometry(0.02, 0.018, 0.2, 10)), M2.tape, g, 0, 0.11, 0); // 그립 테이프
+      mesh(geo(new THREE.CylinderGeometry(0.045, 0.021, 0.58, 12)), M2.wood, g, 0, 0.5, 0);
+      mesh(geo(new THREE.SphereGeometry(0.045, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2)), M2.wood, g, 0, 0.79, 0); // 둥근 타격부
+    });
+    meleeModel('axe', [0.06, 0.25, -0.27], [0.1, 0, -2.5], (g) => {
+      mesh(geo(new THREE.CylinderGeometry(0.019, 0.021, 0.72, 10)), M2.wood, g, 0, 0.36, 0);
+      mesh(box(0.03, 0.1, 0.06), M2.red, g, 0, 0.67, 0);
+      const blade = mesh(box(0.012, 0.16, 0.13), M2.steel, g, 0, 0.66, 0.085); // 도끼날
+      blade.rotation.x = 0.08;
+      mesh(box(0.014, 0.05, 0.1), M2.red, g, 0, 0.67, -0.07); // 반대쪽 곡괭이
+    });
+    this.setMeleeModel('knife');
 
     // ── 팔 (IK 로 매 프레임 배치)
     const upperG = geo(new THREE.CylinderGeometry(0.058, 0.05, 1, 10));
@@ -195,7 +332,10 @@ export class PlayerModel {
     this.aimMarker.renderOrder = 2;
     this.root.add(this.aimMarker);
 
-    this.update(0, { position: new THREE.Vector3(), aimYaw: 0, velocity: new THREE.Vector3(), aiming: false, reloading: false, reloadProgress: 0 });
+    this.update(0, {
+      position: new THREE.Vector3(), aimYaw: 0, velocity: new THREE.Vector3(), aiming: false, reloading: false, reloadProgress: 0,
+      gunId: 'ar12', switchFrom: null, switchProgress: -1, meleeId: 'knife', meleeProgress: -1, swingId: 'knife', swingHitFraction: 0.3,
+    });
   }
 
   private hurt = 0;
@@ -220,11 +360,24 @@ export class PlayerModel {
     }
   }
 
-  /** 사격 1회: 반동 충격 */
-  kick(): void {
-    const k = EFFECTS_CONFIG.recoilKick;
+  /** 사격 1회: 반동 충격 (총기별 세기) */
+  kick(gun: GunId): void {
+    const k = GUNS[gun]?.recoil ?? EFFECTS_CONFIG.recoilKick;
     this.recoil = Math.min(this.recoil + k, k * 1.6);
     this.aimBlend = Math.max(this.aimBlend, 0.85);
+  }
+
+  private setGunModel(id: GunId): void {
+    if (this.gunModels[this.shownGun]) this.gunModels[this.shownGun].group.visible = false;
+    this.shownGun = id;
+    this.gunModels[id].group.visible = true;
+    this.gunMag = this.gunModels[id].mag;
+  }
+
+  private setMeleeModel(id: MeleeId): void {
+    if (this.meleeModels[this.shownMelee]) this.meleeModels[this.shownMelee].group.visible = false;
+    this.shownMelee = id;
+    this.meleeModels[id].group.visible = true;
   }
 
   update(dt: number, s: PlayerVisualState): void {
@@ -294,8 +447,23 @@ export class PlayerModel {
     this.upper.rotation.x = (lz / PLAYER_CONFIG.moveSpeed) * 0.08;
     this.upper.rotation.z = -(lx / PLAYER_CONFIG.moveSpeed) * 0.06 + Math.sin(this.phase) * 0.02 * this.walkBlend;
 
+    // ── 근접 · 교체 상태
+    const melee = s.meleeProgress >= 0;
+    this.meleeBlend += ((melee ? 1 : 0) - this.meleeBlend) * damp(melee ? 30 : 10, dt);
+    if (s.meleeId !== this.shownMelee && !melee) this.setMeleeModel(s.meleeId);
+    if (melee && this.shownMelee !== s.swingId) this.setMeleeModel(s.swingId);
+    // 교체: 앞 절반은 이전 총을 내리고, 뒤 절반은 새 총을 올림
+    let dip = 0;
+    if (s.switchProgress >= 0) {
+      const want = s.switchProgress < 0.5 && s.switchFrom ? s.switchFrom : s.gunId;
+      if (want !== this.shownGun) this.setGunModel(want);
+      dip = Math.sin(s.switchProgress * Math.PI);
+    } else if (s.gunId !== this.shownGun) {
+      this.setGunModel(s.gunId);
+    }
+
     // ── 조준 / 대기 자세 전환
-    const wantAim = s.aiming && !s.reloading ? 1 : 0;
+    const wantAim = s.aiming && !s.reloading && !melee && s.switchProgress < 0 ? 1 : 0;
     this.aimBlend += (wantAim - this.aimBlend) * damp(wantAim > this.aimBlend ? 22 : 4, dt);
 
     // ── 반동: 사격 순간 뒤로 밀렸다가 빠르게 복귀
@@ -307,17 +475,24 @@ export class PlayerModel {
     if (s.reloading && this.lastReload < 0.32 && rp >= 0.32) this.dropMagazine();
     this.lastReload = rp;
 
-    // 총: 대기 자세는 총구를 아래로, 재장전 중에는 옆으로 기울여 탄창 쪽을 보여 줌
-    const low = 1 - this.aimBlend;
+    // 총: 대기 자세는 총구를 아래로, 재장전 중에는 옆으로 기울여 탄창 쪽을 보여 줌,
+    // 교체 중에는 아래로 내렸다 올리고, 근접 공격 중에는 오른쪽 아래로 비켜 든다
+    const low = Math.max(1 - this.aimBlend, this.meleeBlend);
     const rw = this.reloadBlend * envelope(rp, 0.12, 0.88);
+    const mb = this.meleeBlend;
     this.gun.position.set(
-      GUN_POS.x + low * 0.04 + rw * 0.05,
-      GUN_POS.y - low * 0.1 - rw * 0.06,
-      GUN_POS.z - this.recoil - low * 0.05 - rw * 0.08,
+      GUN_POS.x + low * 0.04 + rw * 0.05 - mb * 0.06,
+      GUN_POS.y - low * 0.1 - rw * 0.06 - dip * 0.28 - mb * 0.08,
+      GUN_POS.z - this.recoil - low * 0.05 - rw * 0.08 - dip * 0.15 - mb * 0.12,
     );
-    this.gun.rotation.set(low * 0.55 - this.recoil * 1.1 - rw * 0.2, low * 0.25 + rw * 0.1, rw * 0.55);
-    this.chest.rotation.y = CHEST_TWIST * (0.55 + 0.45 * this.aimBlend);
+    this.gun.rotation.set(low * 0.55 - this.recoil * 1.1 - rw * 0.2 + dip * 0.9 + mb * 0.3, low * 0.25 + rw * 0.1 + mb * 0.3, rw * 0.55 + dip * 0.4);
+    let chestYaw = CHEST_TWIST * (0.55 + 0.45 * this.aimBlend);
     this.chest.rotation.x = -this.recoil * 0.4;
+
+    // ── 근접 휘두르기 경로 (상체 좌표): 손 위치 · 무기 방향
+    const meleePose = melee ? meleePath(MELEE[s.swingId].style, s.meleeProgress, s.swingHitFraction, this.kMeleeHand, this.kMeleeDir) : null;
+    if (meleePose !== null) chestYaw += meleePose * 0.45;
+    this.chest.rotation.y = chestYaw;
     this.gun.updateMatrix();
     this.chest.updateMatrix();
 
@@ -330,15 +505,25 @@ export class PlayerModel {
     // ── 팔 IK
     const right = this.arms[1];
     const left = this.arms[0];
-    const grip = this.gunPoint(0, -0.075, 0.03, this.v1);
-    this.solveArm(right, this.shoulder(-1, this.v3), grip, -1);
-    const leftTarget = this.leftHandTarget(s.reloading ? rp : -1, this.v2);
-    this.solveArm(left, this.shoulder(1, this.v3), leftTarget, 1);
-    if (magInHand) {
-      this.handMag.position.copy(leftTarget).add(this.v4.set(0, 0.06, 0));
-      this.handMag.rotation.copy(this.gun.rotation);
+    const gm = this.gunModels[this.shownGun];
+    const grip = this.gunPoint(gm.grip.x, gm.grip.y, gm.grip.z, this.v1);
+    this.solveArm(right, this.shoulder(-1, this.kShoulder), grip, -1);
+    const mm = this.meleeModels[this.shownMelee];
+    if (meleePose !== null) {
+      // 왼손이 근접 무기를 쥐고 경로를 따라 휘두름. 무기는 실제 손 위치에 붙인다
+      const handPos = this.solveArm(left, this.shoulder(1, this.kShoulder), this.kMeleeHand, 1);
+      mm.group.position.copy(handPos);
+      mm.group.quaternion.setFromUnitVectors(this.up, this.kMeleeDir);
+    } else {
+      const leftTarget = this.leftHandTarget(s.reloading ? rp : -1, this.v2);
+      this.solveArm(left, this.shoulder(1, this.kShoulder), leftTarget, 1);
+      if (magInHand) {
+        this.handMag.position.copy(leftTarget).add(this.v4.set(0, 0.06, 0));
+        this.handMag.rotation.copy(this.gun.rotation);
+      }
+      mm.group.position.copy(mm.holsterPos);
+      mm.group.rotation.copy(mm.holsterRot);
     }
-
   }
 
   dispose(): void {
@@ -359,10 +544,11 @@ export class PlayerModel {
 
   /** 왼손 목표: 평소엔 총열 덮개, 재장전 중에는 탄창 → 허리 파우치 → 탄창 삽입 */
   private leftHandTarget(p: number, out: THREE.Vector3): THREE.Vector3 {
-    const handguard = this.gunPoint(0.0, -0.05, 0.36, this.kHandguard);
+    const gm = this.gunModels[this.shownGun];
+    const handguard = this.gunPoint(gm.support.x, gm.support.y, gm.support.z, this.kHandguard);
     if (p < 0) return out.copy(handguard);
-    const magwell = this.gunPoint(0.02, -0.14, 0.13, this.kMagwell);
-    const magLow = this.gunPoint(0.02, -0.3, 0.12, this.kMagLow);
+    const magwell = this.gunPoint(gm.magwell.x, gm.magwell.y, gm.magwell.z, this.kMagwell);
+    const magLow = this.gunPoint(gm.magwell.x, gm.magwell.y - 0.16, gm.magwell.z, this.kMagLow);
     // 허리 파우치 (왼쪽 허리, 상체 좌표)
     const pouch = this.kPouch.set(0.15, -0.05, 0.1);
     const keys = this.reloadKeys;
@@ -380,7 +566,7 @@ export class PlayerModel {
   }
 
   /** 2관절 IK: 어깨 S → 손 T, 팔꿈치는 아래 · 바깥쪽 */
-  private solveArm(arm: ArmRig, S: THREE.Vector3, T: THREE.Vector3, side: number): void {
+  private solveArm(arm: ArmRig, S: THREE.Vector3, T: THREE.Vector3, side: number): THREE.Vector3 {
     const a = UPPER_ARM;
     const b = FOREARM;
     const toT = this.v4.subVectors(T, S);
@@ -399,11 +585,13 @@ export class PlayerModel {
     arm.elbow.position.copy(elbow);
     arm.hand.position.copy(hand);
     arm.hand.quaternion.setFromRotationMatrix(this.m4.extractRotation(this.gun.matrix));
+    return hand;
   }
 
   private dropMagazine(): void {
     if (!this.onMagazineDrop) return;
-    const p = this.gunPoint(0, -0.2, 0.13, new THREE.Vector3());
+    const gm = this.gunModels[this.shownGun];
+    const p = this.gunPoint(gm.magwell.x, gm.magwell.y - 0.06, gm.magwell.z, new THREE.Vector3());
     this.root.updateMatrixWorld();
     this.upper.localToWorld(p);
     this.onMagazineDrop(p, this.root.rotation.y);
@@ -459,4 +647,50 @@ function aimMarkerGeometry(): THREE.BufferGeometry {
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   ring.dispose(); tri.dispose(); r.dispose(); t.dispose();
   return g;
+}
+
+/**
+ * 근접 무기 휘두르기 경로 (상체 좌표, 정면 +z, 캐릭터 왼쪽 +x).
+ * p: 진행도 0~1, h: 타격 판정 순간 비율. 타격 순간에 무기가 정확히 정면을 지나도록 맞춘다.
+ * outHand: 왼손 목표 위치, outDir: 무기 길이 방향(정규화). 반환값: 가슴 비틀기 각도 (수평 휘두르기)
+ */
+function meleePath(style: MeleeStyle, p: number, h: number, outHand: THREE.Vector3, outDir: THREE.Vector3): number {
+  // 0 → 준비(w) → 타격(h) → 끝(e) → 복귀
+  const w = Math.max(0.06, h - 0.2);
+  const e = Math.min(0.94, h + 0.22);
+  const seg = (a: number, b: number, c: number, d: number): number => {
+    // 시작 a(=휴식) → b(준비 끝) → 0(타격) → c(휘두름 끝) → d(휴식)
+    if (p < w) return a + (b - a) * smooth(p / w);
+    if (p < h) return b + (0 - b) * ((p - w) / (h - w));
+    if (p < e) return 0 + (c - 0) * ((p - h) / (e - h));
+    return c + (d - c) * smooth((p - e) / (1 - e));
+  };
+  switch (style) {
+    case 'stab': {
+      // 찌르기: 뒤로 당겼다가 정면으로 쭉
+      const k = seg(0.35, 0.9, -0.15, 0.4); // 1 = 뒤로, 0 = 최대로 뻗음
+      outHand.set(0.12 * k + 0.02, 0.38 + 0.04 * k, 0.6 - 0.62 * k);
+      outDir.set(0, -0.05, 1).normalize();
+      return 0;
+    }
+    case 'chop': {
+      // 내려치기: 머리 위에서 정면 아래로. phi 0 = 수평 정면, 음수 = 위, 양수 = 아래
+      const phi = seg(-0.6, -2.0, 0.9, -0.4);
+      outHand.set(0.06, 0.48 - Math.sin(phi) * 0.4, 0.12 + Math.cos(phi) * 0.4);
+      outDir.set(0, -Math.sin(phi), Math.cos(phi)).normalize();
+      return 0;
+    }
+    case 'swing':
+    case 'slash':
+    default: {
+      // 수평 베기 · 휘두르기: 왼쪽 뒤에서 오른쪽 앞으로 (theta 0 = 정면)
+      const wide = style === 'swing';
+      const th = seg(0.7, wide ? 1.9 : 1.6, wide ? -1.7 : -1.4, -0.3);
+      const r = wide ? 0.46 : 0.5;
+      const y = wide ? 0.36 : 0.44;
+      outHand.set(Math.sin(th) * r, y, Math.cos(th) * r + 0.05);
+      outDir.set(Math.sin(th), wide ? 0.05 : -0.08, Math.cos(th)).normalize();
+      return th;
+    }
+  }
 }

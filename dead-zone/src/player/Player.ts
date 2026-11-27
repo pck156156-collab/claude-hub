@@ -160,7 +160,7 @@ export class Player {
       const d = Math.hypot(dx, dz);
       this.aimDistance = d;
       if (d > c.minAimDistance) {
-        const o = WEAPON_CONFIG.rifle.muzzleOffset.x;
+        const o = WEAPON_CONFIG.muzzleOffset.x;
         const target = Math.atan2(dx, dz) - Math.asin(Math.min(0.99, o / d));
         const k = c.aimTurnSharpness > 0 ? damp(c.aimTurnSharpness, dt) : 1;
         this.aimYaw = wrapAngle(this.aimYaw + wrapAngle(target - this.aimYaw) * k);
@@ -173,7 +173,7 @@ export class Player {
    * 발사 방향은 수평이며 캐릭터 정면 = 조준점 방향.
    */
   getMuzzle(outPos: THREE.Vector3, outDir: THREE.Vector3): void {
-    const m = WEAPON_CONFIG.rifle.muzzleOffset;
+    const m = WEAPON_CONFIG.muzzleOffset;
     const s = Math.sin(this.aimYaw);
     const c = Math.cos(this.aimYaw);
     outPos.set(this.position.x + m.x * c + m.z * s, m.y, this.position.z - m.x * s + m.z * c);

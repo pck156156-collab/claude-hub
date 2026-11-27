@@ -1,5 +1,5 @@
 /** 브라우저 기본 동작(스크롤 등)을 막을 게임 키 */
-const GAME_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyR', 'Space', 'F3', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
+const GAME_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyR', 'KeyF', 'Digit1', 'Digit2', 'Digit3', 'Space', 'F3', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
 
 /**
  * 키보드 · 마우스 상태 관리.
@@ -17,6 +17,9 @@ export class InputManager {
   leftButton = false;
   /** 마우스가 움직이는 즉시 호출 (게임 프레임을 기다리지 않음 → 커서 UI 지연 없음) */
   onPointerMove: ((x: number, y: number) => void) | null = null;
+  /** 마우스 휠 (deltaY 부호: +1 아래, -1 위). 한 번 굴릴 때 한 번만 */
+  onWheel: ((dir: number) => void) | null = null;
+  private lastWheel = 0;
 
   private pressHandlers = new Map<string, Array<() => void>>();
   private readonly element: HTMLElement;
@@ -45,6 +48,15 @@ export class InputManager {
       if ((e as PointerEvent).button === 0) this.leftButton = false;
     });
     this.on(element, 'contextmenu', (e) => e.preventDefault());
+    this.on(element, 'wheel', (e) => {
+      const ev = e as WheelEvent;
+      ev.preventDefault();
+      // 터치패드처럼 작은 이벤트가 연달아 올 때 한 번으로 묶음
+      const now = performance.now();
+      if (Math.abs(ev.deltaY) < 1 || now - this.lastWheel < 120) return;
+      this.lastWheel = now;
+      this.onWheel?.(Math.sign(ev.deltaY));
+    });
     this.on(document, 'mouseleave', () => (this.mouseInside = false));
     this.on(window, 'blur', () => this.reset());
     this.on(document, 'visibilitychange', () => {

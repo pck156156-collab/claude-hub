@@ -18,7 +18,7 @@ export class PlayerController {
 
   private readonly raycaster = new THREE.Raycaster();
   private readonly ndc = new THREE.Vector2();
-  private readonly aimPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -WEAPON_CONFIG.rifle.muzzleOffset.y);
+  private readonly aimPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -WEAPON_CONFIG.muzzleOffset.y);
   private readonly groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   private readonly forward = new THREE.Vector3();
   private readonly right = new THREE.Vector3();

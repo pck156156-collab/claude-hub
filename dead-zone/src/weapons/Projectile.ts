@@ -2,7 +2,29 @@ import * as THREE from 'three';
 import { PROJECTILE_CONFIG } from '../config/GameConfig';
 import { Damageable, DamageableRegistry } from '../combat/Damageable';
 import { CollisionWorld, RayHit } from '../world/Collision';
-import { ShotEvent } from './Weapon';
+
+/** 탄 1발 발사 정보 (GunShooter 가 산탄마다 하나씩 만든다) */
+export interface BulletSpec {
+  origin: THREE.Vector3;
+  direction: THREE.Vector3;
+  speed: number;
+  range: number;
+  damage: number;
+  pierce: number;
+  sourceId: string;
+  /** 공격 ID (산탄 한 알마다 다름) */
+  attackId: number;
+  knockback: number;
+  /** 거리별 피해 감소 */
+  falloffStart: number;
+  falloffEnd: number;
+  minFalloff: number;
+  /** 궤적 색 · 굵기 */
+  tracerColor: number;
+  tracerWidth: number;
+  /** 저프레임 보정: 발사 후 이미 흐른 시간 */
+  elapsed: number;
+}
 
 export interface ImpactEvent {
   point: THREE.Vector3;
@@ -10,8 +32,11 @@ export interface ImpactEvent {
   normal: THREE.Vector3;
   direction: THREE.Vector3;
   target: Damageable | null;
+  /** 거리 감소가 적용된 피해 */
   damage: number;
   sourceId: string;
+  attackId: number;
+  knockback: number;
 }
 
 interface Projectile {
@@ -24,6 +49,12 @@ interface Projectile {
   range: number;
   damage: number;
   sourceId: string;
+  attackId: number;
+  knockback: number;
+  falloffStart: number;
+  falloffEnd: number;
+  minFalloff: number;
+  width: number;
   /** 남은 추가 관통 수 */
   pierceLeft: number;
   /** 이 탄이 이미 맞힌 대상 (같은 좀비에게 두 번 피해 주지 않음) */
@@ -44,10 +75,13 @@ export class ProjectileSystem {
   private cursor = 0;
   private readonly hit: RayHit = { t: 0, x: 0, z: 0, nx: 0, nz: 0, collider: null as never };
   private readonly impact: ImpactEvent = {
-    point: new THREE.Vector3(), normal: new THREE.Vector3(), direction: new THREE.Vector3(), target: null, damage: 0, sourceId: '',
+    point: new THREE.Vector3(), normal: new THREE.Vector3(), direction: new THREE.Vector3(), target: null, damage: 0, sourceId: '', attackId: 0, knockback: 0,
   };
   private readonly geometry: THREE.BufferGeometry;
   private readonly material: THREE.MeshBasicMaterial;
+  private readonly texture: THREE.CanvasTexture;
+  /** 궤적 색별 재질 (총기마다 미리 만들어 두고 공유) */
+  private readonly materials = new Map<number, THREE.MeshBasicMaterial>();
   private readonly tmp = new THREE.Vector3();
   /** 누적 통계 (디버그 · 테스트) */
   stats = { spawned: 0, expired: 0, hitWorld: 0, hitTarget: 0, recycled: 0, pierced: 0 };
@@ -56,9 +90,8 @@ export class ProjectileSystem {
 
   constructor(private readonly scene: THREE.Scene, private readonly collision: CollisionWorld, private readonly targets: DamageableRegistry) {
     this.geometry = tracerGeometry();
-    this.material = new THREE.MeshBasicMaterial({
-      map: tracerTexture(), color: 0xffd28a, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, side: THREE.DoubleSide,
-    });
+    this.texture = tracerTexture();
+    this.material = this.materialFor(0xffd28a);
     for (let i = 0; i < PROJECTILE_CONFIG.poolSize; i++) {
       const mesh = new THREE.Mesh(this.geometry, this.material);
       mesh.visible = false;
@@ -67,7 +100,8 @@ export class ProjectileSystem {
       scene.add(mesh);
       this.pool.push({
         active: false, dying: false, pos: new THREE.Vector3(), prev: new THREE.Vector3(), dir: new THREE.Vector3(),
-        speed: 0, traveled: 0, range: 0, damage: 0, sourceId: '', pierceLeft: 0, hits: [], mesh,
+        speed: 0, traveled: 0, range: 0, damage: 0, sourceId: '', attackId: 0, knockback: 0, falloffStart: 999, falloffEnd: 999, minFalloff: 1, width: 0.08,
+        pierceLeft: 0, hits: [], mesh,
       });
     }
   }
@@ -82,7 +116,19 @@ export class ProjectileSystem {
     return this.pool.length;
   }
 
-  spawn(shot: ShotEvent): void {
+  /** 궤적 색 재질 (같은 색은 재사용) */
+  materialFor(color: number): THREE.MeshBasicMaterial {
+    let m = this.materials.get(color);
+    if (!m) {
+      m = new THREE.MeshBasicMaterial({
+        map: this.texture, color, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, side: THREE.DoubleSide,
+      });
+      this.materials.set(color, m);
+    }
+    return m;
+  }
+
+  spawn(shot: BulletSpec): void {
     // 빈 슬롯을 찾고, 없으면 가장 오래된 탄을 재사용
     let p: Projectile | null = null;
     for (let k = 0; k < this.pool.length; k++) {
@@ -99,11 +145,18 @@ export class ProjectileSystem {
     p.pos.copy(shot.origin);
     p.prev.copy(shot.origin);
     p.dir.copy(shot.direction).normalize();
-    p.speed = shot.stats.projectileSpeed;
-    p.range = shot.stats.range;
-    p.damage = shot.stats.damage;
-    p.sourceId = shot.stats.id;
-    p.pierceLeft = shot.stats.pierce ?? 0;
+    p.speed = shot.speed;
+    p.range = shot.range;
+    p.damage = shot.damage;
+    p.sourceId = shot.sourceId;
+    p.attackId = shot.attackId;
+    p.knockback = shot.knockback;
+    p.falloffStart = shot.falloffStart;
+    p.falloffEnd = shot.falloffEnd;
+    p.minFalloff = shot.minFalloff;
+    p.width = shot.tracerWidth;
+    p.mesh.material = this.materialFor(shot.tracerColor);
+    p.pierceLeft = shot.pierce;
     p.hits.length = 0;
     p.traveled = 0;
     this.stats.spawned++;
@@ -132,7 +185,7 @@ export class ProjectileSystem {
       const len = Math.min(L, traveled);
       p.mesh.position.copy(head);
       p.mesh.rotation.set(0, Math.atan2(p.dir.x, p.dir.z), 0);
-      p.mesh.scale.set(PROJECTILE_CONFIG.tracerWidth, PROJECTILE_CONFIG.tracerWidth, len);
+      p.mesh.scale.set(p.width, p.width, len);
       // 사라진 탄은 마지막 구간을 한 프레임 그린 뒤 풀로 돌아간다
       if (p.dying) p.dying = false;
     }
@@ -145,8 +198,8 @@ export class ProjectileSystem {
   dispose(): void {
     for (const p of this.pool) this.scene.remove(p.mesh);
     this.geometry.dispose();
-    this.material.map?.dispose();
-    this.material.dispose();
+    this.texture.dispose();
+    for (const m of this.materials.values()) m.dispose();
   }
 
   /**
@@ -178,10 +231,10 @@ export class ProjectileSystem {
           p.pierceLeft--;
           p.hits.push(target.target);
           this.stats.pierced++;
-          e.direction.copy(p.dir);
-          e.damage = p.damage;
-          e.sourceId = p.sourceId;
+          p.traveled += move * t;
+          this.fillImpact(p, e);
           this.onImpact?.(e);
+          p.traveled -= move * t;
           p.pos.copy(e.point);
           p.traveled += move * t;
           move *= 1 - t;
@@ -215,10 +268,22 @@ export class ProjectileSystem {
     p.traveled += moved;
     p.active = false;
     p.dying = true; // 이번 프레임은 맞은 지점까지 궤적을 그린다
-    e.direction.copy(p.dir);
-    e.damage = p.damage;
-    e.sourceId = p.sourceId;
+    this.fillImpact(p, e);
     this.onImpact?.(e);
+  }
+
+  /** 거리별 피해 감소 (샷건: 가까우면 100%, 멀면 minFalloff 배) */
+  private fillImpact(p: Projectile, e: ImpactEvent): void {
+    e.direction.copy(p.dir);
+    let k = 1;
+    if (p.traveled > p.falloffStart) {
+      const t = Math.min(1, (p.traveled - p.falloffStart) / Math.max(0.001, p.falloffEnd - p.falloffStart));
+      k = 1 + (p.minFalloff - 1) * t;
+    }
+    e.damage = p.damage * k;
+    e.sourceId = p.sourceId;
+    e.attackId = p.attackId;
+    e.knockback = p.knockback;
   }
 }
 

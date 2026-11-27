@@ -46,6 +46,7 @@ export class Effects {
     scene.add(this.flash);
     this.flashLight = new THREE.PointLight(0xffb45c, 0, 9, 2);
     scene.add(this.flashLight);
+    this.initArcs();
   }
 
   get particleCount(): number {
@@ -53,15 +54,19 @@ export class Effects {
   }
 
   /** 총구 화염 + 섬광 + 연기 + 탄피 배출 */
-  muzzleFlash(pos: THREE.Vector3, yaw: number, ejectPos: THREE.Vector3): void {
+  /**
+   * @param scale 총기별 화염 크기 (권총 0.7 ~ 샷건 1.6)
+   * @param shell 샷건 = 붉은 산탄 탄피
+   */
+  muzzleFlash(pos: THREE.Vector3, yaw: number, ejectPos: THREE.Vector3, scale = 1, shell = false): void {
     this.flash.position.copy(pos);
     this.flash.rotation.set(0, yaw, Math.random() * Math.PI);
-    const s = 0.8 + Math.random() * 0.45;
+    const s = (0.8 + Math.random() * 0.45) * scale;
     this.flash.scale.set(s, s, s * (0.9 + Math.random() * 0.5));
     this.flash.visible = true;
     this.flashTimer = EFFECTS_CONFIG.muzzleFlashTime;
     this.flashLight.position.copy(pos);
-    this.flashLight.intensity = 14;
+    this.flashLight.intensity = 14 * Math.min(1.6, scale);
 
     const fx = Math.sin(yaw);
     const fz = Math.cos(yaw);
@@ -78,14 +83,16 @@ export class Effects {
     this.casings.spawn({
       x: ejectPos.x, y: ejectPos.y, z: ejectPos.z,
       vx: rx * side - fx * 0.6, vy: 2.4 + Math.random(), vz: rz * side - fz * 0.6,
-      life: 1.8, size: 1, endScale: 1, gravity: 16, bounce: 0.35, spin: 22, shape: [0.025, 0.025, 0.07],
-      color: tmpColor.setRGB(0.85, 0.62, 0.25),
+      life: 1.8, size: 1, endScale: 1, gravity: 16, bounce: 0.35, spin: 22, shape: shell ? [0.04, 0.04, 0.1] : [0.025, 0.025, 0.07],
+      color: shell ? tmpColor.setRGB(0.6, 0.12, 0.1) : tmpColor.setRGB(0.85, 0.62, 0.25),
     });
   }
 
   /** 장애물 피격: 불꽃 + 먼지 + 작은 파편 */
-  impactSurface(point: THREE.Vector3, normal: THREE.Vector3): void {
-    for (let i = 0; i < 7; i++) {
+  /** @param scale 탄착 효과 크기 (산탄은 작게) */
+  impactSurface(point: THREE.Vector3, normal: THREE.Vector3, scale = 1): void {
+    const n = Math.max(2, Math.round(7 * scale));
+    for (let i = 0; i < n; i++) {
       const v = randomHemisphere(normal, 0.8);
       const speed = 5 + Math.random() * 7;
       this.sparks.spawn({
@@ -162,7 +169,75 @@ export class Effects {
     }
   }
 
+  /**
+   * 근접 공격 궤적: 실제 판정 범위(부채꼴 · 사거리)를 그대로 그린다.
+   * 메시 3개를 돌려 쓰고, 부채꼴 모양은 각도별로 한 번만 만든다.
+   */
+  meleeArc(x: number, z: number, yaw: number, range: number, arcDeg: number, color: number, style: string): void {
+    const slot = this.arcs[this.arcCursor];
+    this.arcCursor = (this.arcCursor + 1) % this.arcs.length;
+    let g = this.arcGeometries.get(arcDeg);
+    if (!g) {
+      const a = THREE.MathUtils.degToRad(arcDeg);
+      // XY 평면 링 → 눕히면 각도 -90° 방향이 +Z (정면)
+      g = new THREE.RingGeometry(0.3, 1, 28, 1, -Math.PI / 2 - a / 2, a).rotateX(-Math.PI / 2);
+      this.arcGeometries.set(arcDeg, g);
+    }
+    slot.mesh.geometry = g;
+    slot.mesh.position.set(x, style === 'chop' ? 0.35 : 1.0, z);
+    slot.mesh.rotation.set(0, yaw, 0);
+    slot.mesh.scale.set(range, 1, range);
+    (slot.mesh.material as THREE.MeshBasicMaterial).color.setHex(color);
+    slot.life = slot.maxLife = 0.18;
+    slot.mesh.visible = true;
+  }
+
+  /** 근접 명중: 흰 베기 불꽃 + 피격 */
+  meleeHit(point: THREE.Vector3, direction: THREE.Vector3, heavy: boolean): void {
+    this.impactFlesh(point, direction);
+    const n = heavy ? 10 : 6;
+    for (let i = 0; i < n; i++) {
+      const v = randomHemisphere(direction, 1);
+      const sp = 3 + Math.random() * (heavy ? 6 : 3);
+      this.sparks.spawn({
+        x: point.x, y: point.y, z: point.z, vx: v.x * sp, vy: v.y * sp + 1, vz: v.z * sp,
+        life: 0.14, size: 1, endScale: 0.2, drag: 4, stretch: 0.03, shape: [0.03, 0.03, 0.08], color: tmpColor.setRGB(1.5, 1.45, 1.3),
+      });
+    }
+    if (heavy) {
+      this.smoke.spawn({
+        x: point.x, y: 0.4, z: point.z, vx: direction.x, vy: 0.3, vz: direction.z,
+        life: 0.5, size: 0.5, endScale: 2.4, drag: 3, spin: 0.6, color: tmpColor.setRGB(0.55, 0.5, 0.45),
+      });
+    }
+  }
+
+  private readonly arcs: { mesh: THREE.Mesh; life: number; maxLife: number }[] = [];
+  private arcCursor = 0;
+  private readonly arcGeometries = new Map<number, THREE.BufferGeometry>();
+
+  private initArcs(): void {
+    for (let i = 0; i < 3; i++) {
+      const m = new THREE.Mesh(
+        new THREE.BufferGeometry(),
+        new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, side: THREE.DoubleSide }),
+      );
+      m.visible = false;
+      m.renderOrder = 6;
+      m.frustumCulled = false;
+      this.scene.add(m);
+      this.arcs.push({ mesh: m, life: 0, maxLife: 1 });
+    }
+  }
+
   update(dt: number, camera: THREE.Camera): void {
+    for (const a of this.arcs) {
+      if (a.life <= 0) continue;
+      a.life -= dt;
+      const k = Math.max(0, a.life / a.maxLife);
+      (a.mesh.material as THREE.MeshBasicMaterial).opacity = 0.45 * k;
+      if (a.life <= 0) a.mesh.visible = false;
+    }
     if (this.flashTimer > 0) {
       this.flashTimer -= dt;
       const k = Math.max(0, this.flashTimer / EFFECTS_CONFIG.muzzleFlashTime);
@@ -179,6 +254,7 @@ export class Effects {
   }
 
   clear(): void {
+    for (const a of this.arcs) { a.life = 0; a.mesh.visible = false; }
     for (const p of [this.sparks, this.debris, this.casings, this.smoke]) p.clear();
     this.flash.visible = false;
     this.flashLight.intensity = 0;
@@ -186,6 +262,8 @@ export class Effects {
   }
 
   dispose(): void {
+    for (const a of this.arcs) { this.scene.remove(a.mesh); (a.mesh.material as THREE.Material).dispose(); }
+    for (const g of this.arcGeometries.values()) g.dispose();
     for (const p of [this.sparks, this.debris, this.casings, this.smoke]) p.dispose();
     this.flash.traverse((o) => {
       const m = o as THREE.Mesh;

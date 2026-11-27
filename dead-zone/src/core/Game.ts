@@ -1,7 +1,8 @@
 import * as THREE from 'three';
-import { CAMERA_CONFIG, DEFAULT_QUALITY, QUALITY_PRESETS, QualityLevel, RENDER_CONFIG, SIMULATION, WEAPON_CONFIG, ZOMBIE_TYPES } from '../config/GameConfig';
+import { CAMERA_CONFIG, DEFAULT_QUALITY, PLAYER_CONFIG, QUALITY_PRESETS, QualityLevel, RENDER_CONFIG, SIMULATION, ZOMBIE_TYPES } from '../config/GameConfig';
 import { GameCamera } from '../camera/GameCamera';
-import { DamageableRegistry, HitInfo } from '../combat/Damageable';
+import { DamageableRegistry } from '../combat/Damageable';
+import { AttackSpec, CombatSystem } from '../combat/CombatSystem';
 import { Effects } from '../effects/Effects';
 import { Player } from '../player/Player';
 import { PlayerController } from '../player/PlayerController';
@@ -10,22 +11,27 @@ import { Zombie } from '../enemies/Zombie';
 import { ZombieManager } from '../enemies/ZombieManager';
 import { ZombieRenderer } from '../enemies/ZombieRenderer';
 import { DebugPanel } from '../ui/DebugPanel';
-import { GameUI } from '../ui/GameUI';
+import { GameUI, LoadoutSlot } from '../ui/GameUI';
 import { ProjectileSystem } from '../weapons/Projectile';
 import { Weapon } from '../weapons/Weapon';
+import { GunShooter } from '../weapons/GunShooter';
+import { MeleeSystem } from '../weapons/MeleeSystem';
+import { WeaponSystem } from '../weapons/WeaponSystem';
+import { GUNS, GunId, MASTERY, MELEE, MeleeId } from '../weapons/WeaponData';
+import { RewardQueue } from '../progression/RewardQueue';
 import { World } from '../world/World';
 import { WaveSystem, formatTime } from '../waves/WaveSystem';
 import { ExperienceOrbs } from '../items/ExperienceOrb';
 import { ExperienceSystem } from '../progression/ExperienceSystem';
-import { PlayerStats } from '../upgrades/StatCalculator';
+import { PlayerStats, computeGunStats, computeMeleeStats } from '../upgrades/StatCalculator';
 import { RARITY_INFO, UPGRADES, UpgradeContext } from '../upgrades/UpgradeData';
 import { UpgradeManager } from '../upgrades/UpgradeManager';
-import { LevelUpScreen } from '../ui/LevelUpScreen';
+import { LevelUpScreen, WeaponOffer } from '../ui/LevelUpScreen';
 import { AudioManager } from './AudioManager';
 import { RecordResult, RecordSet, Records } from './Records';
 import { InputManager } from './InputManager';
 
-/** levelup: 강화 선택 중 (게임 로직 정지, 렌더 · UI 입력만 유지). gameover 가 항상 우선 */
+/** levelup: 보상 선택 중 (강화 · 총기 · 근접 무기; 게임 로직 정지, 렌더 · UI 입력만 유지). gameover 가 항상 우선 */
 type State = 'start' | 'playing' | 'paused' | 'levelup' | 'gameover' | 'error';
 
 /**
@@ -43,8 +49,21 @@ export class Game {
   readonly player: Player;
   readonly model: PlayerModel;
   readonly controller: PlayerController;
-  readonly weapon: Weapon;
+  /** 무기 슬롯 (총기 2 · 근접 1) · 숙련도 */
+  readonly weapons: WeaponSystem;
+  /** 공통 피해 처리 (총기 · 근접) */
+  readonly combat = new CombatSystem();
+  /** 사격 방식 (산탄 분배 · 퍼짐) */
+  readonly shooter: GunShooter;
+  /** 근접 공격 (F) */
+  readonly melee: MeleeSystem;
+  /** 보상 대기열 (강화 → 총기 → 근접) */
+  readonly rewards = new RewardQueue();
   readonly registry = new DamageableRegistry();
+  /** 현재 들고 있는 총 (이전 단계 코드 · 테스트 호환) */
+  get weapon(): Weapon {
+    return this.weapons.current;
+  }
   readonly zombies: ZombieManager;
   readonly zombieRenderer: ZombieRenderer;
   readonly projectiles: ProjectileSystem;
@@ -64,7 +83,10 @@ export class Game {
   private spread = 0;
   private readonly renderPos = new THREE.Vector3();
   private readonly eject = new THREE.Vector3();
-  private readonly hitInfo: HitInfo = { damage: 0, point: new THREE.Vector3(), direction: new THREE.Vector3(), sourceId: '' };
+  private readonly gunSpec: AttackSpec = {
+    attackId: 0, sourceId: '', kind: 'gun', damage: 0, critChance: 0, critMultiplier: 2, knockback: 0,
+    point: new THREE.Vector3(), direction: new THREE.Vector3(),
+  };
   private readonly cleanups: (() => void)[] = [];
   /** 생존 시간 · 웨이브 진행 */
   readonly waves = new WaveSystem();
@@ -75,9 +97,10 @@ export class Game {
   readonly orbs: ExperienceOrbs;
   readonly levelUp = new LevelUpScreen();
   /** 크리티컬 판정용 난수 (테스트에서 고정 가능) */
-  critRandom: () => number = Math.random;
+  get critRandom(): () => number { return this.combat.random; }
+  set critRandom(fn: () => number) { this.combat.random = fn; }
   /** 누적 치명타 수 (디버그 · 테스트) */
-  critHits = 0;
+  get critHits(): number { return this.combat.stats.crits; }
   /** 개인 최고 기록 (localStorage) */
   readonly records = new Records();
   /** 첫 판이 시작되었는지 (시작 화면에서 처음 누를 때만 판을 새로 시작) */
@@ -109,8 +132,10 @@ export class Game {
     this.model = new PlayerModel();
     this.scene.add(this.model.root);
     this.controller = new PlayerController(this.input);
-    this.weapon = new Weapon(WEAPON_CONFIG.rifle, this.player);
+    this.weapons = new WeaponSystem(this.player);
     this.projectiles = new ProjectileSystem(this.scene, this.world.collision, this.registry);
+    this.shooter = new GunShooter(this.projectiles, this.combat);
+    this.melee = new MeleeSystem(this.weapons, this.registry, this.world.collision, this.combat);
     this.effects = new Effects(this.scene);
 
     this.zombies = new ZombieManager(this.world.collision, this.registry, this.player);
@@ -190,16 +215,20 @@ export class Game {
       this.accumulator += dt;
       while (this.accumulator >= step && this.state === 'playing') {
         this.player.step(step, cmd, this.world.collision);
-        this.weapon.update(step, this.controller.fire);
+        // 이동 중 퍼짐: 기본 이동 속도 대비 현재 속도
+        this.shooter.moveRatio = this.player.speed / PLAYER_CONFIG.moveSpeed;
+        this.weapons.update(step, this.controller.fire, this.melee.busy);
+        this.melee.step(step, { x: this.player.position.x, z: this.player.position.z, yaw: this.player.aimYaw });
         this.projectiles.step(step);
         this.zombies.step(step, this.time, this.gameCamera.camera);
         // 경험치 결정 흡수 → 경험치 (레벨업은 아래에서 상태 전환)
         this.orbs.step(step, this.player.position.x, this.player.position.z, this.upgrades.stats.pickupRadius, (v) => this.experience.collect(v));
+        if (this.melee.busy && this.player.dead) this.melee.reset();
         this.time += step;
         if (this.state === 'playing') this.waves.step(step); // 이 스텝에 죽었으면 시간 정지
         this.accumulator -= step;
         // 레벨업: 게임 오버가 아닐 때만. 이후 스텝은 멈춘다 (while 조건)
-        if (this.state === 'playing' && this.experience.levels.pending > 0 && !this.player.dead) this.enterLevelUp();
+        if (this.state === 'playing' && this.rewards.length > 0 && !this.player.dead) this.enterLevelUp();
       }
       alpha = this.state === 'playing' ? this.accumulator / step : 1;
     } else if (this.state === 'gameover') {
@@ -207,7 +236,7 @@ export class Game {
       if (this.gameOverDelay > 0) {
         this.gameOverDelay -= dt;
         if (this.gameOverDelay <= 0 && this.lastRun) {
-          this.ui.showGameOver(this.lastRun.run, this.lastRun.result, { level: this.experience.levels.level, upgrades: this.upgrades.ownedCount });
+          this.ui.showGameOver(this.lastRun.run, this.lastRun.result, { level: this.experience.levels.level, upgrades: this.upgrades.ownedCount, weapons: this.loadoutText() });
         }
       }
     }
@@ -228,13 +257,16 @@ export class Game {
   restart(): void {
     // 강화 · 경험치 먼저 초기화 → 기본 능력치(최대 체력 100 등) 복원 뒤 부활
     this.levelUp.hide();
+    this.rewards.clear();
     this.upgrades.reset();
     this.experience.reset();
     this.orbs.reset();
-    this.critHits = 0;
+    this.combat.reset();
+    // 무기: 기본 장비(AR-12 · P9 · 나이프) · 숙련도 · 탄약 초기화
+    this.weapons.reset();
+    this.melee.reset();
     this.player.revive(this.world.spawnPoint);
     this.model.setDead(false);
-    this.weapon.reset();
     this.projectiles.clear();
     this.effects.clear();
     this.zombies.reset();
@@ -252,39 +284,125 @@ export class Game {
     const lv = this.experience.levels;
     this.ui.setXp(lv.level, lv.xp, lv.required);
     this.ui.setUpgrades(this.upgradeSummary());
+    this.ui.setLoadout(this.loadoutSlots(), this.meleeSlot());
   }
 
-  /** 레벨업 시작: 로직 정지 + 강화 카드 3장 */
+  /** 보상 시작: 로직 정지 + 대기열 맨 앞 보상 화면 */
   private enterLevelUp(): void {
     this.state = 'levelup';
     this.input.reset();
     this.weapon.releaseTrigger();
     this.accumulator = 0;
     this.ui.hideWaveBanner();
-    this.showLevelUpChoices();
+    this.showNextReward();
   }
 
-  private showLevelUpChoices(): void {
-    const lv = this.experience.levels;
-    const choices = this.upgrades.rollChoices(this.upgradeContext());
-    if (choices.length === 0) {
-      // 고를 수 있는 강화가 하나도 없으면 (모두 최대) 기회를 소모하고 진행
-      lv.pending = 0;
-      this.resumeFromLevelUp();
-      return;
+  /** 대기열 맨 앞 보상을 보여 준다. 고를 것이 없는 보상은 건너뛰고, 다 끝나면 재개 */
+  private showNextReward(): void {
+    for (;;) {
+      const r = this.rewards.current;
+      if (!r || this.player.dead) { this.rewards.clear(); this.resumeFromLevelUp(); return; }
+      const remaining = this.rewards.length - 1;
+      if (r.kind === 'upgrade') {
+        const choices = this.upgrades.rollChoices(this.upgradeContext());
+        if (choices.length > 0) { this.levelUp.show(r.level, choices, remaining); return; }
+      } else if (r.kind === 'gun') {
+        const offers = this.weapons.gunOffers();
+        if (offers.length > 0) { this.showGunOffer(offers, r.level, remaining); return; }
+      } else {
+        const offers = this.weapons.meleeOffers();
+        if (offers.length > 0) { this.showMeleeOffer(offers, r.level, remaining); return; }
+      }
+      this.rewards.complete(); // 고를 것이 없음 → 다음 보상
     }
-    // 이번 선택이 몇 레벨 달성분인지 (연속 레벨업이면 앞 레벨부터 차례로)
-    this.levelUp.show(lv.level - lv.pending + 1, choices, lv.pending - 1);
   }
 
   /** 카드 선택 확정 (화면 · 키 입력 공통). 선택마다 한 번만 호출된다 */
   chooseUpgrade(id: string): void {
-    if (this.state !== 'levelup') return;
+    if (this.state !== 'levelup' || this.rewards.current?.kind !== 'upgrade') return;
     this.upgrades.apply(id);
-    const lv = this.experience.levels;
-    lv.pending = Math.max(0, lv.pending - 1);
-    if (lv.pending > 0 && !this.player.dead) this.showLevelUpChoices();
-    else this.resumeFromLevelUp();
+    this.rewards.complete();
+    this.showNextReward();
+  }
+
+  /**
+   * 무기 보상 결정. 총기: value = 교체할 슬롯 ("0" | "1"), 근접: value = "equip". id 가 null 이면 거절.
+   */
+  decideWeaponReward(id: string | null, value: string | null): void {
+    const r = this.rewards.current;
+    if (this.state !== 'levelup' || !r || r.kind === 'upgrade') return;
+    if (id && r.kind === 'gun' && (value === '0' || value === '1')) {
+      const old = GUNS[this.weapons.slots[Number(value) as 0 | 1]].name;
+      if (this.weapons.equipGun(id as GunId, Number(value) as 0 | 1)) this.ui.toast(`${GUNS[id as GunId].name} 장착 (${old} 해제)`);
+    } else if (id && r.kind === 'melee') {
+      const old = MELEE[this.weapons.meleeId].name;
+      if (this.weapons.equipMelee(id as MeleeId)) this.ui.toast(`${MELEE[id as MeleeId].name} 장착 (${old} 해제)`);
+    }
+    this.rewards.complete();
+    this.showNextReward();
+  }
+
+  private showGunOffer(ids: GunId[], level: number, remaining: number): void {
+    const w = this.weapons;
+    const statOf = (id: GunId) => computeGunStats(GUNS[id], w.mods, w.gunMastery.bonus(id));
+    const cur = w.slots.map(statOf);
+    const offers: WeaponOffer[] = ids.map((id) => {
+      const st = statOf(id);
+      const best = (v: number, key: 'dps' | 'mag' | 'reload') => {
+        const others = cur.map((c) => (key === 'dps' ? c.damage * c.pellets * c.fireRate : key === 'mag' ? c.magazineSize : c.reloadTime));
+        const better = key === 'reload' ? v < Math.min(...others) : v > Math.max(...others);
+        const worse = key === 'reload' ? v > Math.max(...others) : v < Math.min(...others);
+        return better ? 'up' : worse ? 'down' : '';
+      };
+      const dps = st.damage * st.pellets * st.fireRate;
+      return {
+        id, name: GUNS[id].name, role: GUNS[id].role, color: '#e0452f', label: `Lv ${w.gunMastery.level(id)} 숙련`,
+        stats: [
+          ['피해', st.pellets > 1 ? `${round1(st.damage)} × ${st.pellets}` : round1(st.damage), ''],
+          ['발사 속도', `${round1(st.fireRate)}/초 · ${st.auto ? '자동' : '반자동'}`, ''],
+          ['초당 화력', String(Math.round(dps)), best(dps, 'dps')],
+          ['탄창', String(st.magazineSize), best(st.magazineSize, 'mag')],
+          ['재장전', `${st.reloadTime.toFixed(1)}초`, best(st.reloadTime, 'reload')],
+          ['사거리', GUNS[id].rangeLabel, ''],
+        ],
+        actions: [0, 1].map((slot) => ({ label: `슬롯 ${slot + 1} 교체 (${GUNS[w.slots[slot]].name} 해제)`, value: String(slot) })),
+      };
+    });
+    const eq = w.slots.map((id, i) => {
+      const c = cur[i];
+      return `<b>[${i + 1}] ${GUNS[id].name}</b> 피해 ${c.pellets > 1 ? `${round1(c.damage)}×${c.pellets}` : round1(c.damage)} · ${round1(c.fireRate)}/초 · 초당 ${Math.round(c.damage * c.pellets * c.fireRate)} · 탄창 ${c.magazineSize} · 장전 ${c.reloadTime.toFixed(1)}초`;
+    }).join('<br>');
+    this.levelUp.showOffer('NEW FIREARM', `레벨 ${level} 보상 · 새 총기를 장착할 슬롯을 고르세요`, offers, `현재 장착 — ${eq}`, remaining);
+  }
+
+  private showMeleeOffer(ids: MeleeId[], level: number, remaining: number): void {
+    const w = this.weapons;
+    const statOf = (id: MeleeId) => computeMeleeStats(MELEE[id], w.mods, w.meleeMastery.bonus(id));
+    const cur = statOf(w.meleeId);
+    const cmp = (v: number, c: number, lowerBetter = false) => (v === c ? '' : (v > c) !== lowerBetter ? 'up' : 'down');
+    const offers: WeaponOffer[] = ids.map((id) => {
+      const st = statOf(id);
+      return {
+        id, name: MELEE[id].name, role: MELEE[id].role, color: '#ffb347', label: `Lv ${w.meleeMastery.level(id)} 숙련`,
+        stats: [
+          ['피해', round1(st.damage), cmp(st.damage, cur.damage)],
+          ['공격 간격', `${st.interval.toFixed(2)}초`, cmp(st.interval, cur.interval, true)],
+          ['사거리', st.range.toFixed(1), cmp(st.range, cur.range)],
+          ['공격 각도', `${st.arcDeg}°`, cmp(st.arcDeg, cur.arcDeg)],
+          ['최대 대상', `${st.maxTargets}마리`, cmp(st.maxTargets, cur.maxTargets)],
+          ['넉백', st.knockback.toFixed(1), cmp(st.knockback, cur.knockback)],
+        ],
+        actions: [{ label: `장착 (${MELEE[w.meleeId].name} 해제)`, value: 'equip' }],
+      };
+    });
+    const eq = `<b>[F] ${MELEE[w.meleeId].name}</b> 피해 ${round1(cur.damage)} · 간격 ${cur.interval.toFixed(2)}초 · 사거리 ${cur.range.toFixed(1)} · ${cur.arcDeg}° · 최대 ${cur.maxTargets}마리`;
+    this.levelUp.showOffer('NEW MELEE WEAPON', `레벨 ${level} 보상 · 근접 무기를 교체하거나 거절하세요`, offers, `현재 장착 — ${eq}`, remaining);
+  }
+
+  /** 결과 화면용 장착 무기 요약 */
+  private loadoutText(): string {
+    const w = this.weapons;
+    return `${GUNS[w.slots[0]].name} · ${GUNS[w.slots[1]].name} · ${MELEE[w.meleeId].name}`;
   }
 
   private resumeFromLevelUp(): void {
@@ -296,9 +414,9 @@ export class Game {
     return { health: this.player.health, maxHealth: this.player.maxHealth, level: (id) => this.upgrades.level(id) };
   }
 
-  /** 강화 능력치 → 실제 시스템에 반영 (기본값은 각 설정에 보존, 여기서는 현재값만 덮어씀) */
+  /** 강화 보정값 → 실제 시스템에 반영 (무기 최종 능력치는 무기 기본값에서 다시 계산) */
   private applyStats(st: PlayerStats): void {
-    this.weapon.applyStats({ damage: st.damage, fireRate: st.fireRate, magazineSize: st.magazineSize, reloadTime: st.reloadTime, pierce: st.pierce });
+    this.weapons.setMods(st);
     this.player.moveSpeed = st.moveSpeed;
     this.player.setMaxHealth(st.maxHealth);
     this.player.damageReduction = st.damageReduction;
@@ -398,43 +516,71 @@ export class Game {
   }
 
   private wireEvents(): void {
-    this.weapon.addListener({
+    this.weapons.addGunListener({
       onFire: (shot) => {
-        this.projectiles.spawn(shot);
+        const def = GUNS[shot.stats.id];
+        this.shooter.fire(shot); // 산탄 · 퍼짐 → 투사체
         this.lastShotTime = this.time;
-        this.spread = Math.min(1, this.spread + 0.35);
+        this.spread = Math.min(1, this.spread + 0.35 * (def.recoil / 0.09));
         this.eject.copy(shot.origin).addScaledVector(shot.direction, -0.72);
         this.eject.y += 0.05;
-        this.effects.muzzleFlash(shot.origin, Math.atan2(shot.direction.x, shot.direction.z), this.eject);
-        this.model.kick();
-        this.audio.gunshot();
+        this.effects.muzzleFlash(shot.origin, Math.atan2(shot.direction.x, shot.direction.z), this.eject, def.flashScale, def.id === 'bulldog');
+        this.model.kick(def.id);
+        this.audio.gunshot(def.soundPitch, def.soundBody);
       },
       onReloadStart: () => this.audio.reload(),
       onDryFire: () => this.audio.click(0.7),
     });
 
+    // 투사체 명중 → 공통 피해 처리
     this.projectiles.onImpact = (e) => {
       if (e.target) {
-        const h = this.hitInfo;
-        h.damage = e.damage;
-        h.point.copy(e.point);
-        h.direction.copy(e.direction);
-        h.sourceId = e.sourceId;
-        // 치명타: 명중마다 판정 (관통 탄은 대상마다 따로)
-        const st = this.upgrades.stats;
-        const crit = st.critChance > 0 && this.critRandom() < st.critChance;
-        if (crit) { h.damage *= st.critMultiplier; this.critHits++; }
-        e.target.takeDamage(h);
-        this.effects.impactFlesh(e.point, e.direction);
-        if (crit) this.effects.critSpark(e.point);
-        if (e.target instanceof Zombie) this.zombies.notifyDamaged(e.target);
-        if (e.target.canBeHit()) {
-          this.ui.flashHit(false, crit);
-          this.audio.hit();
-        }
+        const sp = this.gunSpec;
+        const m = this.weapons.mods;
+        sp.attackId = e.attackId;
+        sp.sourceId = e.sourceId;
+        sp.damage = e.damage;
+        sp.critChance = m.critChance;
+        sp.critMultiplier = m.critMultiplier;
+        sp.knockback = e.knockback;
+        sp.point.copy(e.point);
+        sp.direction.copy(e.direction);
+        this.combat.apply(e.target, sp);
       } else {
-        this.effects.impactSurface(e.point, e.normal);
+        this.effects.impactSurface(e.point, e.normal, e.sourceId === 'bulldog' ? 0.35 : 1);
       }
+    };
+
+    // 공통 피해 결과: 이펙트 · 숙련도 · 처치 · 흡혈
+    this.combat.onHit = (r) => {
+      const melee = r.spec.kind === 'melee';
+      if (melee) {
+        this.effects.meleeHit(r.spec.point, r.spec.direction, r.spec.knockback >= 4);
+        this.audio.meleeHit(r.spec.knockback >= 4);
+      } else {
+        this.effects.impactFlesh(r.spec.point, r.spec.direction);
+      }
+      if (r.crit) this.effects.critSpark(r.spec.point);
+      this.weapons.addMastery(r.spec.kind, r.spec.sourceId, r.dealt);
+      if (r.target instanceof Zombie) this.zombies.notifyDamaged(r.target);
+      if (r.killed && melee && this.weapons.meleeStats.lifesteal > 0) this.player.heal(this.weapons.meleeStats.lifesteal);
+      if (!r.killed) {
+        this.ui.flashHit(false, r.crit);
+        if (!melee) this.audio.hit();
+      }
+    };
+
+    this.melee.onSwingStart = (id) => this.audio.swing(id === 'knife' ? 0.6 : id === 'axe' || id === 'bat' ? 1.5 : 1);
+    this.melee.onSwingHit = (o, range, arc) => {
+      const def = MELEE[this.melee.swingId];
+      this.effects.meleeArc(o.x, o.z, o.yaw, range, arc, def.trailColor, def.style);
+    };
+    this.weapons.gunMastery.onLevelUp = (id, lv) => this.ui.toast(`${GUNS[id as GunId].name} 숙련도 Lv.${lv} — 피해 +${(lv - 1) * 5}%`);
+    this.weapons.meleeMastery.onLevelUp = (id, lv) => this.ui.toast(`${MELEE[id as MeleeId].name} 숙련도 Lv.${lv} — 피해 +${(lv - 1) * 5}%`);
+    this.experience.onLevelUp = (ups) => {
+      const lv = this.experience.levels;
+      for (let l = lv.level - ups + 1; l <= lv.level; l++) this.rewards.addLevel(l);
+      lv.pending = 0; // 보상은 대기열이 관리
     };
 
     this.model.onMagazineDrop = (p, yaw) => {
@@ -477,16 +623,28 @@ export class Game {
     };
 
     this.input.onPointerMove = (x, y) => this.ui.moveCursor(x, y);
-    this.input.onPress('KeyR', () => { if (this.state === 'playing') this.weapon.requestReload(); });
+    this.input.onPress('KeyR', () => {
+      if (this.state === 'playing' && !this.melee.busy && !this.weapons.switching) this.weapon.requestReload();
+    });
+    // 근접 공격: 누를 때마다 한 번 (키 반복은 InputManager 가 무시)
+    this.input.onPress('KeyF', () => { if (this.state === 'playing' && !this.player.dead) this.melee.tryAttack(); });
+    this.input.onWheel = () => {
+      if (this.state === 'playing' && this.weapons.cycle(this.melee.busy)) this.audio.weaponSwitch();
+    };
     this.input.onPress('Escape', () => {
       if (this.state === 'playing') this.pause('ESC 키로 일시정지했습니다.');
     });
     this.input.onPress('F3', () => this.debug.toggle());
-    // 레벨업 카드: 숫자 1 · 2 · 3
+    // 숫자 1 · 2 · 3: 플레이 중에는 총기 슬롯, 보상 화면에서는 강화 카드
     ['Digit1', 'Digit2', 'Digit3', 'Numpad1', 'Numpad2', 'Numpad3'].forEach((code) => {
-      this.input.onPress(code, () => { if (this.state === 'levelup') this.levelUp.select(Number(code.slice(-1)) - 1); });
+      const n = Number(code.slice(-1)) - 1;
+      this.input.onPress(code, () => {
+        if (this.state === 'levelup') this.levelUp.select(n);
+        else if (this.state === 'playing' && n < 2 && this.weapons.selectSlot(n as 0 | 1, this.melee.busy)) this.audio.weaponSwitch();
+      });
     });
     this.levelUp.onChoose = (choice) => this.chooseUpgrade(choice.def.id);
+    this.levelUp.onOffer = (id, value) => this.decideWeaponReward(id, value);
     this.upgrades.onStatsChanged = (st) => this.applyStats(st);
     this.upgrades.onInstantEffect = (def) => {
       if (def.effect === 'heal') this.player.heal(def.value);
@@ -533,9 +691,14 @@ export class Game {
     const pos = p.interpolatedPosition(alpha, this.renderPos);
     const yaw = p.interpolatedYaw(alpha);
     const aiming = this.controller.fire || this.time - this.lastShotTime < 1.2;
+    const w = this.weapons;
+    const m = this.melee;
     this.model.update(dt, {
       position: pos, aimYaw: yaw, velocity: p.velocity, aiming,
       reloading: this.weapon.reloading, reloadProgress: this.weapon.reloadProgress,
+      gunId: w.currentId, switchFrom: w.switchFrom, switchProgress: w.switchProgress,
+      meleeId: w.meleeId, meleeProgress: m.progress, swingId: m.swingId,
+      swingHitFraction: m.swingDuration > 0 ? m.swingHitTime / m.swingDuration : 0.35,
     });
 
     if (dt > 0) {
@@ -555,13 +718,43 @@ export class Game {
     this.ui.setUpgrades(this.upgradeSummary());
     this.orbs.render();
     this.spread *= Math.exp(-6 * dt);
-    const w = this.weapon;
+    const cur = this.weapon;
     this.ui.update(dt, {
-      health: p.health, maxHealth: p.maxHealth, ammo: w.ammo, magazineSize: w.stats.magazineSize, weaponName: w.stats.name,
-      reloading: w.reloading, reloadProgress: w.reloadProgress, spread: this.spread,
+      health: p.health, maxHealth: p.maxHealth, ammo: cur.ammo, magazineSize: cur.stats.magazineSize, weaponName: cur.stats.name,
+      reloading: cur.reloading, reloadProgress: cur.reloadProgress, spread: this.spread,
     });
+    this.ui.setLoadout(this.loadoutSlots(), this.meleeSlot());
 
     if (draw) this.renderer.render(this.scene, this.gameCamera.camera);
+  }
+
+  /** HUD 총기 슬롯 2칸 */
+  private loadoutSlots(): LoadoutSlot[] {
+    const w = this.weapons;
+    return w.slots.map((id, i) => {
+      const g = w.gun(id);
+      const lv = w.gunMastery.level(id);
+      const active = i === w.active;
+      return {
+        name: GUNS[id].name, ammo: g.reloading ? '재장전' : `${g.ammo}/${g.stats.magazineSize}`,
+        mastery: `숙련 Lv${lv}${lv > 1 ? ` (+${(lv - 1) * 5}%)` : ''}`, active,
+        state: g.reloading ? 'reloading' : 'idle',
+        bar: g.reloading ? g.reloadProgress : active && w.switching ? 1 - (w.switchProgress < 0 ? 1 : w.switchProgress) : w.gunMastery.progress(id) * (lv < MASTERY.maxLevel ? 1 : 0),
+      };
+    });
+  }
+
+  /** HUD 근접 칸 */
+  private meleeSlot(): LoadoutSlot {
+    const w = this.weapons;
+    const m = this.melee;
+    const lv = w.meleeMastery.level(w.meleeId);
+    const ready = m.cooldown <= 0 && !m.busy;
+    return {
+      name: MELEE[w.meleeId].name, ammo: m.busy ? '공격 중' : ready ? '준비' : `${m.cooldown.toFixed(1)}초`,
+      mastery: `숙련 Lv${lv}${lv > 1 ? ` (+${(lv - 1) * 5}%)` : ''}`, active: false,
+      state: ready ? 'ready' : 'cooldown', bar: ready ? 1 : 1 - m.cooldownRatio,
+    };
   }
 
   private debugRows(): [string, string][] {
@@ -582,7 +775,8 @@ export class Game {
       ['파티클', String(this.effects.particleCount)],
       ['체력', `${p.health}/${p.maxHealth}${p.invulnerable > 0 ? ' 무적' : ''} · 받은 피해 ${p.damageTaken} · 막힘 ${p.blockedHits}`],
       ['레벨', `${this.experience.levels.level} · ${this.experience.levels.xp}/${this.experience.levels.required} XP · 대기 ${this.experience.levels.pending} · 결정 ${this.orbs.count}개(${this.orbs.totalValue}XP)`],
-      ['강화 능력치', (() => { const st = this.upgrades.stats; return `피해 ${st.damage.toFixed(1)} · 연사 ${st.fireRate.toFixed(1)} · 탄창 ${st.magazineSize} · 장전 ${st.reloadTime.toFixed(2)}s · 관통 ${st.pierce} · 치명 ${Math.round(st.critChance * 100)}%`; })()],
+      ['총기 능력치', (() => { const st = this.weapon.stats; return `${st.name}: 피해 ${st.damage.toFixed(1)}${st.pellets > 1 ? `×${st.pellets}` : ''} · 연사 ${st.fireRate.toFixed(1)} · 탄창 ${st.magazineSize} · 장전 ${st.reloadTime.toFixed(2)}s · 관통 ${st.pierce} · 치명 ${Math.round(this.weapons.mods.critChance * 100)}%`; })()],
+      ['근접 능력치', (() => { const st = this.weapons.meleeStats; return `${MELEE[this.weapons.meleeId].name}: 피해 ${st.damage.toFixed(1)} · 간격 ${st.interval.toFixed(2)}s · 사거리 ${st.range.toFixed(2)} · ${st.arcDeg}° · ${st.maxTargets}마리 · 넉백 ${st.knockback.toFixed(1)}`; })()],
       ['웨이브', `${this.waves.wave} (${formatTime(this.waves.time)}) · 간격 ${this.zombies.difficulty.spawnInterval}s · 상한 ${this.zombies.difficulty.maxAlive} · 체력 ×${this.zombies.difficulty.healthMultiplier}`],
       ['좀비', `생존 ${this.zombies.aliveCount} · 시체 ${this.zombies.corpseCount} · 처치 ${this.zombies.kills} · 생성 ${this.zombies.spawned}`],
       ['AI 시간', `${this.zombies.aiMs.toFixed(3)}ms / 스텝 · 경로 ${this.zombies.nav.lastBuildMs.toFixed(2)}ms (${this.zombies.nav.builds}회)`],
@@ -614,4 +808,8 @@ function detectGpu(renderer: THREE.WebGLRenderer): string {
   } catch {
     return '알 수 없음';
   }
+}
+
+function round1(v: number): string {
+  return String(Math.round(v * 10) / 10);
 }

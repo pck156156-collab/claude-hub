@@ -31,20 +31,24 @@ export class AudioManager {
     if (this.ctx && this.ctx.state === 'running') void this.ctx.suspend();
   }
 
-  gunshot(): void {
+  /**
+   * 총성. pitch: 높을수록 가볍고 짧은 소리 (권총 · SMG), body: 저음 충격 크기 (샷건 · LMG)
+   */
+  gunshot(pitch = 1, body = 0.7): void {
     const c = this.ready();
     if (!c) return;
     const t = c.currentTime;
+    const len = 0.12 / Math.sqrt(pitch);
     // 날카로운 소음 + 저음 충격
-    this.noiseBurst(t, 0.12, 2400, 0.9, 'lowpass', 0.6);
-    this.noiseBurst(t, 0.04, 6000, 0.35, 'highpass', 0.2);
+    this.noiseBurst(t, len, 2400 * pitch, 0.9, 'lowpass', 0.6);
+    this.noiseBurst(t, 0.04, 6000 * pitch, 0.35, 'highpass', 0.2);
     const o = c.createOscillator();
     const g = c.createGain();
     o.type = 'triangle';
-    o.frequency.setValueAtTime(150, t);
-    o.frequency.exponentialRampToValueAtTime(45, t + 0.1);
-    g.gain.setValueAtTime(0.7, t);
-    g.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+    o.frequency.setValueAtTime(150 * pitch, t);
+    o.frequency.exponentialRampToValueAtTime(45 * pitch, t + len * 0.85);
+    g.gain.setValueAtTime(body, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + len);
     o.connect(g).connect(this.master!);
     o.start(t);
     o.stop(t + 0.14);
@@ -63,6 +67,26 @@ export class AudioManager {
     this.noiseBurst(t + 0.05, 0.04, 1800, 0.4, 'bandpass', 2); // 탄창 분리
     this.noiseBurst(t + 1.25, 0.05, 1500, 0.55, 'bandpass', 2); // 삽입
     this.noiseBurst(t + 1.55, 0.04, 2600, 0.5, 'bandpass', 3); // 장전 손잡이
+  }
+
+  /** 근접 휘두르는 바람 소리 (무거운 무기일수록 낮고 김) */
+  swing(weight = 1): void {
+    const c = this.ready();
+    if (!c) return;
+    this.noiseBurst(c.currentTime, 0.12 + 0.1 * weight, 900 / weight, 0.35, 'bandpass', 0.9);
+  }
+
+  /** 근접 명중 */
+  meleeHit(heavy: boolean): void {
+    const c = this.ready();
+    if (!c) return;
+    const t = c.currentTime;
+    this.noiseBurst(t, heavy ? 0.16 : 0.08, heavy ? 500 : 1200, 0.8, 'lowpass', 1.2);
+  }
+
+  /** 총기 교체 */
+  weaponSwitch(): void {
+    this.click(0.8);
   }
 
   hit(): void {

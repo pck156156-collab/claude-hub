@@ -46,32 +46,26 @@ export const PLAYER_CONFIG = {
   backpedalSpeedFactor: 1,
 };
 
+/**
+ * 모든 무기 공통 설정. 무기별 능력치는 weapons/WeaponData.ts 에 있다.
+ */
 export const WEAPON_CONFIG = {
-  rifle: {
-    id: 'rifle',
-    name: 'M-17 자동소총',
-    magazineSize: 30,
-    /** 초당 발사 수 */
-    fireRate: 8,
-    reloadTime: 1.8,
-    projectileSpeed: 60,
-    range: 45,
-    damage: 25,
-    /** 탄 퍼짐 (도). 0 이면 완전히 조준선 그대로 */
-    spreadDeg: 0.8,
-    /** 탄창을 다 쓰면 자동으로 재장전 (false 면 R 키로만) */
-    autoReloadOnEmpty: true,
-    /**
-     * 총구 위치 (캐릭터 로컬, 조준 자세 기준). three.js 규약상 정면 +z 일 때 캐릭터의 오른쪽은 -x.
-     * 소총을 오른쪽 어깨에 견착하므로 x 는 음수. 캐릭터 모델(PlayerModel)의 총 위치와 일치해야 한다.
-     */
-    muzzleOffset: { x: -0.12, y: 1.32, z: 1.05 },
-  },
+  /**
+   * 총구 위치 (캐릭터 로컬, 조준 자세 기준). three.js 규약상 정면 +z 일 때 캐릭터의 오른쪽은 -x.
+   * 총을 오른쪽 어깨에 견착하므로 x 는 음수. 모든 총기 모델은 총구가 이 위치에 오도록 만든다.
+   */
+  muzzleOffset: { x: -0.12, y: 1.32, z: 1.05 },
+  /** 탄창을 다 쓰면 자동으로 재장전 (false 면 R 키로만) */
+  autoReloadOnEmpty: true,
+  /** 총기 교체 시간 (초) */
+  switchTime: 0.35,
+  /** 반자동 총기: 발사 간격이 이만큼 남았을 때 누른 클릭은 기억했다가 쏜다 (초) */
+  semiAutoBuffer: 0.12,
 };
 
 export const PROJECTILE_CONFIG = {
   /** 동시에 존재할 수 있는 최대 투사체 수 (풀 크기) */
-  poolSize: 64,
+  poolSize: 128,
   tracerLength: 2.2,
   tracerWidth: 0.08,
 };
@@ -101,8 +95,10 @@ export interface ZombieStats {
   radius: number;
   /** 피격 경직 시간 */
   hitStunTime: number;
-  /** 넉백 속도 (단위/초, 빠르게 감쇠) */
+  /** 넉백 속도 (단위/초, 빠르게 감쇠). 무기에 넉백 값이 없을 때 쓰는 기본값 */
   knockback: number;
+  /** 넉백 저항 0~1 (향후 엘리트 · 보스용. 1 = 밀리지 않음, 강한 넉백 경직도 무시) */
+  knockbackResistance: number;
   /** 회전 속도 (rad/s) */
   turnSpeed: number;
   /** 땅에서 기어 나오는 시간 */
@@ -129,6 +125,7 @@ export const ZOMBIE_TYPES: Record<string, ZombieStats> = {
     radius: 0.4,
     hitStunTime: 0.18,
     knockback: 2.6,
+    knockbackResistance: 0,
     turnSpeed: 5,
     spawnTime: 1.0,
     corpseTime: 3.5,

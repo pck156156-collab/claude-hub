@@ -20,6 +20,19 @@ export interface UIState {
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
+/** HUD 무기 칸 하나 */
+export interface LoadoutSlot {
+  name: string;
+  /** 탄약 "28/30" · 근접은 "준비" 등 */
+  ammo: string;
+  /** 숙련도 표시 */
+  mastery: string;
+  active: boolean;
+  state: 'idle' | 'reloading' | 'ready' | 'cooldown';
+  /** 아래 막대 0~1 (재장전 · 쿨다운 진행) */
+  bar: number;
+}
+
 export class GameUI {
   private readonly app = $('app');
   private readonly hpText = $('hp-text');
@@ -47,6 +60,8 @@ export class GameUI {
   private readonly xpFill = $('xp-fill');
   private readonly xpText = $('xp-text');
   private readonly upgradeList = $('upgrade-list');
+  private readonly slotEls = [$('slot-0'), $('slot-1'), $('melee-slot')];
+  private readonly toastEl = $('toast');
   private readonly pauseReason = $('pause-reason');
   private readonly last: Partial<Record<string, unknown>> = {};
   private pipEls: HTMLElement[] = [];
@@ -106,6 +121,30 @@ export class GameUI {
     this.set('waveProgress', progress, (v) => (this.waveProgress.style.width = `${v}%`));
   }
 
+  /** 장착 무기 표시 (총기 2 · 근접 1). 바뀐 값만 DOM 갱신 */
+  setLoadout(slots: LoadoutSlot[], melee: LoadoutSlot): void {
+    const all = [...slots, melee];
+    all.forEach((d, i) => {
+      const el = this.slotEls[i];
+      this.set(`slot${i}`, `${d.name}|${d.ammo}|${d.mastery}|${d.active}|${d.state}`, () => {
+        (el.querySelector('.s-name') as HTMLElement).textContent = d.name;
+        (el.querySelector('.s-ammo') as HTMLElement).textContent = d.ammo;
+        (el.querySelector('.s-mastery') as HTMLElement).textContent = d.mastery;
+        el.classList.toggle('active', d.active);
+        el.classList.toggle('reloading', d.state === 'reloading');
+        el.classList.toggle('ready', d.state === 'ready');
+      });
+      const bar = Math.round(d.bar * 100);
+      this.set(`slotbar${i}`, bar, (v) => ((el.querySelector('.s-bar') as HTMLElement).style.width = `${v}%`));
+    });
+  }
+
+  /** 화면 아래 짧은 알림 (숙련도 상승 · 무기 획득) */
+  toast(text: string): void {
+    this.toastEl.textContent = text;
+    restartAnimation(this.toastEl, 'show');
+  }
+
   /** 레벨 · 경험치 게이지 */
   setXp(level: number, xp: number, required: number): void {
     this.set('xpLevel', level, (v) => (this.xpLevel.textContent = String(v)));
@@ -142,7 +181,8 @@ export class GameUI {
     this.banner.classList.remove('show');
   }
 
-  showGameOver(run: RecordSet, rec: RecordResult, extra: { level: number; upgrades: number }): void {
+  showGameOver(run: RecordSet, rec: RecordResult, extra: { level: number; upgrades: number; weapons?: string }): void {
+    $('go-weapons').textContent = extra.weapons ? `장착 무기 — ${extra.weapons}` : '';
     $('go-level').textContent = String(extra.level);
     $('go-upgrades').textContent = `${extra.upgrades}종`;
     $('go-time').textContent = formatTime(run.time);
@@ -200,9 +240,11 @@ export class GameUI {
     this.set('mag', s.magazineSize, (v) => {
       this.ammoMax.textContent = String(v);
       this.pips.replaceChildren();
-      this.pipEls = Array.from({ length: v }, () => this.pips.appendChild(document.createElement('i')));
+      // 탄창이 큰 총(LMG 100발)은 탄 표시 줄을 생략
+      this.pipEls = v > 50 ? [] : Array.from({ length: v }, () => this.pips.appendChild(document.createElement('i')));
     });
-    this.set('ammo', s.ammo, (v) => {
+    this.set('ammo', s.ammo + s.magazineSize * 10000, () => {
+      const v = s.ammo;
       this.ammoCurrent.textContent = String(v);
       this.ammoBox.classList.toggle('low', v > 0 && v <= s.magazineSize * 0.25);
       this.ammoBox.classList.toggle('empty', v === 0);

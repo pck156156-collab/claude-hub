@@ -8,8 +8,15 @@ export interface HitInfo {
   point: THREE.Vector3;
   /** 투사체 진행 방향 (정규화) */
   direction: THREE.Vector3;
-  /** 공격한 무기 ID (향후 무기별 효과 · 통계용) */
+  /** 공격한 무기 ID (숙련도 · 통계) */
   sourceId: string;
+  /**
+   * 공격 1회의 고유 ID. 같은 ID 로는 한 대상에게 한 번만 피해가 들어간다.
+   * (산탄 한 알 · 근접 한 번 휘두르기 = 각각 하나의 ID)
+   */
+  attackId?: number;
+  /** 넉백 속도 (없으면 대상 기본값) */
+  knockback?: number;
 }
 
 /** 피격 판정 형태: 지면 위 원기둥 */
@@ -57,6 +64,11 @@ export class DamageableRegistry {
 
   get count(): number {
     return this.items.length;
+  }
+
+  /** 등록된 대상 전체 (근접 범위 검사 등). 읽기 전용 */
+  get all(): readonly Damageable[] {
+    return this.items;
   }
 
   /** 선분이 높이 y 에서 처음 맞히는 대상. exclude 에 있는 대상은 무시 (관통 탄이 이미 맞힌 대상) */
