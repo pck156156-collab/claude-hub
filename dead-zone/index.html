@@ -18,6 +18,11 @@
           </div>
           <div class="wave-progress"><i id="wave-progress"></i></div>
         </section>
+        <section class="hud-boss" id="boss-hud" hidden>
+          <div class="boss-name"><span id="boss-name">THE ABOMINATION</span><em id="boss-phase"></em></div>
+          <div class="boss-bar"><i class="boss-trail" id="boss-trail"></i><i class="boss-fill" id="boss-fill"></i><i class="boss-mark"></i></div>
+          <div class="boss-hp" id="boss-hp"></div>
+        </section>
         <section class="hud-tr">
           <div class="stat kills"><span>처치</span><b id="kill-count">0</b></div>
           <div class="stat"><span>생존 좀비</span><b id="alive-count">0</b></div>
@@ -70,6 +75,10 @@
       </div>
 
       <div id="toast" class="toast" aria-live="polite"></div>
+      <div id="alert-banner" class="alert-banner" aria-live="polite">
+        <div class="ab-title" id="ab-title"></div>
+        <div class="ab-sub" id="ab-sub"></div>
+      </div>
 
       <div id="crosshair" class="crosshair">
         <div class="ch-ring"></div>

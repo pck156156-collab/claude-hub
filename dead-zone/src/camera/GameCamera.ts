@@ -20,6 +20,14 @@ export class GameCamera {
   private readonly hit = new THREE.Vector3();
   private readonly tmp = new THREE.Vector3();
   private readonly probes = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+  /** 화면 흔들림 세기 (폭발 · 보스 강타), 빠르게 감쇠 */
+  private shakeAmount = 0;
+  private shakeTime = 0;
+
+  /** 화면 흔들림 추가 (최대 0.5) */
+  shake(amount: number): void {
+    this.shakeAmount = Math.min(0.5, Math.max(this.shakeAmount, amount));
+  }
 
   constructor(aspect: number) {
     const c = CAMERA_CONFIG;
@@ -34,6 +42,7 @@ export class GameCamera {
   snap(target: THREE.Vector3): void {
     this.focus.set(target.x, 0, target.z);
     this.lookAhead.set(0, 0, 0);
+    this.shakeAmount = 0;
     this.apply();
   }
 
@@ -50,6 +59,9 @@ export class GameCamera {
     this.focus.x += (target.x + this.lookAhead.x - this.focus.x) * k;
     this.focus.z += (target.z + this.lookAhead.z - this.focus.z) * k;
     this.focus.y = 0;
+    this.shakeTime += dt;
+    this.shakeAmount *= Math.exp(-7 * dt);
+    if (this.shakeAmount < 0.005) this.shakeAmount = 0;
     this.apply();
   }
 
@@ -99,6 +111,13 @@ export class GameCamera {
     // 캐릭터 몸통 높이를 바라봐야 화면 중앙에 캐릭터가 온다
     this.lookPoint.set(this.focus.x, 1.0, this.focus.z);
     this.camera.position.copy(this.lookPoint).add(this.offset);
+    if (this.shakeAmount > 0) {
+      const t = this.shakeTime * 40;
+      const k = this.shakeAmount;
+      this.lookPoint.x += Math.sin(t * 1.3) * k;
+      this.lookPoint.y += Math.sin(t * 1.7 + 1) * k * 0.6;
+      this.lookPoint.z += Math.cos(t * 1.1) * k;
+    }
     this.camera.lookAt(this.lookPoint);
     this.camera.updateMatrixWorld();
   }

@@ -74,9 +74,71 @@ export const PROJECTILE_CONFIG = {
  * 좀비 종류별 능력치. 새 종류(빠른 · 탱커 · 원거리 좀비)는 같은 형태로 항목만 추가하면 된다.
  * 외형 차이는 appearance (색상 · 크기 · 자세) 로 표현한다.
  */
+/** 적 종류 (6단계: 특수 좀비 · 보스) */
+export type EnemyKind = 'walker' | 'runner' | 'tank' | 'spitter' | 'exploder' | 'boss';
+/** 공격 방식: 근접 / 원거리 투사체 / 자폭 / 보스 패턴 */
+export type AttackType = 'melee' | 'ranged' | 'explode' | 'boss';
+/** 걸음걸이 (애니메이션) */
+export type Gait = 'shamble' | 'run' | 'stomp' | 'waddle' | 'lurch' | 'boss';
+
+/** 체형: 부위별 굵기 배율 (절차적 메시 하나를 종류마다 다르게 늘림) */
+export interface BuildDef {
+  /** 몸통 [폭, 높이, 두께] */
+  torso: [number, number, number];
+  /** 팔다리 굵기 */
+  limb: number;
+  /** 다리 굵기 (없으면 limb) */
+  leg?: number;
+  head: number;
+  /** 어깨 폭 배율 */
+  shoulder: number;
+  /** 배 · 혹 크기 (0 = 없음) */
+  belly: number;
+  /** 배 위치 z (+ 앞 / - 등) */
+  bellyZ: number;
+}
+
+/** 러너: 짧은 가속 */
+export interface DashParams { minDist: number; maxDist: number; prepTime: number; time: number; speedMul: number; turnRate: number; cooldown: number }
+/** 스피터: 원거리 독성 투사체 */
+export interface RangedParams {
+  range: number; preferMin: number; preferMax: number; retreatDist: number;
+  windup: number; recover: number; projectileSpeed: number; projectileRadius: number; repositionTime: number;
+}
+/** 폭발 좀비 */
+export interface ExplodeParams { trigger: number; radius: number; primeTime: number; damage: number; primeSpeedMul: number }
+/** 보스 패턴 */
+export interface BossParams {
+  meleeRange: number; meleeArcDeg: number; meleeWindup: number; meleeRecover: number; meleeInterval: number;
+  chargeMinDist: number; chargeMaxDist: number; chargeDistance: number; chargeSpeed: number; chargeWindup: number;
+  chargeLock: number; chargeTurnRate: number; chargeCooldown: number; chargeDamageMul: number; chargeRecover: number; chargeWallRecover: number;
+  slamRadius: number; slamTrigger: number; slamWindup: number; slamCooldown: number; slamDamageMul: number; slamRecover: number;
+  /** 패턴 사이 최소 간격 */
+  patternGap: number;
+  phase2: { threshold: number; cooldownMul: number; windupMul: number; speedMul: number; chargeCooldown: number; slamRadiusMul: number; roarTime: number };
+}
+
 export interface ZombieStats {
   id: string;
   name: string;
+  kind: EnemyKind;
+  attackType: AttackType;
+  /** 엘리트 변형 여부 */
+  elite: boolean;
+  /** 상태 이상(경직) 저항 0~1. 경직 시간이 (1-값) 배, 1 이면 경직 없음 */
+  statusResistance: number;
+  /** 좀비끼리 밀어낼 때의 무게 (클수록 덜 밀림) */
+  mass: number;
+  /** 이동 방향 회전 속도 (rad/s). 0 = 즉시 방향 전환(워커), 값이 있으면 곡선으로 방향을 바꿈 */
+  steerRate: number;
+  /** 근접 공격 예비 동작 중 바닥에 공격 범위 표시 */
+  telegraph: boolean;
+  /** 특수 능력 설명 (UI · 디버그) */
+  abilities: string[];
+  dash?: DashParams;
+  ranged?: RangedParams;
+  explode?: ExplodeParams;
+  boss?: BossParams;
   maxHealth: number;
   /** 이동 속도 (단위/초) */
   moveSpeed: number;
@@ -107,13 +169,28 @@ export interface ZombieStats {
   corpseTime: number;
   /** 처치 시 떨어뜨리는 경험치 */
   xp: number;
-  appearance: { scale: number; hunch: number; skin: number[]; shirts: number[]; pants: number[] };
+  appearance: {
+    scale: number; hunch: number; skin: number[]; shirts: number[]; pants: number[];
+    build?: BuildDef; gait?: Gait;
+    /** 발광 부위 색 (독 주머니 · 고름 · 균열) */
+    glow?: number;
+    /** 눈 색 */
+    eye?: number;
+  };
 }
 
 export const ZOMBIE_TYPES: Record<string, ZombieStats> = {
   walker: {
     id: 'walker',
     name: '워커',
+    kind: 'walker',
+    attackType: 'melee',
+    elite: false,
+    statusResistance: 0,
+    mass: 1,
+    steerRate: 0,
+    telegraph: false,
+    abilities: [],
     maxHealth: 100,
     moveSpeed: 2.2,
     attackDamage: 10,

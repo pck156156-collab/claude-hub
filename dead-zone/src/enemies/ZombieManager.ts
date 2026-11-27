@@ -1,9 +1,17 @@
 import * as THREE from 'three';
-import { NAV_CONFIG, SPAWN_CONFIG, WaveParams, ZOMBIE_TYPES, ZombieStats, waveParams } from '../config/GameConfig';
+import { EnemyKind, NAV_CONFIG, SPAWN_CONFIG, WaveParams, ZOMBIE_TYPES, ZombieStats, waveParams } from '../config/GameConfig';
+import { BOSS_CONFIG, ELITE_CONFIG, ENEMY_TYPES, SPAWN_TABLE, bossStats, eliteChance, makeElite, scaleForWave, spawnCap, spawnWeight } from './EnemyData';
+import { ENEMY_BEHAVIORS } from './EnemyBehaviors';
 import { DamageableRegistry } from '../combat/Damageable';
 import { CollisionWorld } from '../world/Collision';
 import { NavGrid } from '../world/NavGrid';
-import { AttackTarget, Zombie, ZombieContext, ZombieState } from './Zombie';
+import { AttackTarget, EnemyEvents, Zombie, ZombieContext, ZombieState } from './Zombie';
+
+type SpawnKind = Exclude<EnemyKind, 'boss'>;
+const SPAWN_KINDS = Object.keys(SPAWN_TABLE) as SpawnKind[];
+
+/** 행동 모듈이 게임에 알릴 곳이 없을 때 (테스트 등) */
+const NO_EVENTS: EnemyEvents = { canSpit: () => true, spit: () => {}, emit: () => {} };
 
 /** 이 거리보다 먼 좀비는 AI 를 절반 빈도(60Hz)로 갱신 (화면 밖이라 차이가 보이지 않음) */
 const FAR_AI_DISTANCE = 30;
@@ -30,6 +38,13 @@ export class ZombieManager {
 
   onKilled: ((z: Zombie) => void) | null = null;
   onSpawned: ((z: Zombie) => void) | null = null;
+  /** 폭발 좀비가 자폭해 사라짐 (처치 아님: 경험치 · 처치 수 없음) */
+  onSelfDestruct: ((z: Zombie) => void) | null = null;
+  /** 종류별 생성 수 (테스트 · 디버그) */
+  readonly spawnedByKind: Record<string, number> = {};
+  /** 처치한 엘리트 · 보스 수 */
+  eliteKills = 0;
+  bossKills = 0;
   /** false 면 자동 생성 중지 (테스트 · 디버그) */
   spawningEnabled = true;
   /** 생성 위치 선택용 난수 (테스트에서 고정 가능) */
@@ -37,6 +52,8 @@ export class ZombieManager {
   /** 현재 웨이브 난이도 (생성 간격 · 상한 · 능력치 배율) */
   difficulty: WaveParams = waveParams(1);
   private scaledStats: ZombieStats = ZOMBIE_TYPES.walker;
+  /** 현재 웨이브 배율을 적용한 종류별 능력치 */
+  private readonly scaledKinds: Partial<Record<EnemyKind, ZombieStats>> = {};
   private stepIndex = 0;
   /** 마지막 생성 간격 기록 (테스트 · 디버그) */
   readonly spawnTimes: number[] = [];
@@ -47,7 +64,36 @@ export class ZombieManager {
     target: AttackTarget,
   ) {
     this.nav = new NavGrid(collision);
-    this.ctx = { target, nav: this.nav, collision, time: 0 };
+    this.ctx = { target, nav: this.nav, collision, time: 0, events: NO_EVENTS, behaviors: ENEMY_BEHAVIORS };
+  }
+
+  /** 특수 행동이 사건(사격 · 폭발 · 보스 패턴)을 알릴 곳 */
+  set events(e: EnemyEvents) {
+    this.ctx.events = e;
+  }
+
+  /** 행동 모듈 · 위험 범위 계산용 공용 정보 (읽기 전용으로 사용) */
+  get context(): ZombieContext {
+    return this.ctx;
+  }
+
+  /** 살아 있는 보스 (없으면 null) */
+  get boss(): Zombie | null {
+    for (const z of this.zombies) if (z.alive && z.stats.kind === 'boss') return z;
+    return null;
+  }
+
+  /** 종류별 살아 있는 수 */
+  aliveOf(kind: EnemyKind): number {
+    let n = 0;
+    for (const z of this.zombies) if (z.alive && z.stats.kind === kind) n++;
+    return n;
+  }
+
+  get eliteAlive(): number {
+    let n = 0;
+    for (const z of this.zombies) if (z.alive && z.stats.elite) n++;
+    return n;
   }
 
   get aliveCount(): number {
@@ -66,6 +112,9 @@ export class ZombieManager {
     this.zombies.length = 0;
     this.kills = 0;
     this.spawned = 0;
+    this.eliteKills = 0;
+    this.bossKills = 0;
+    for (const k of Object.keys(this.spawnedByKind)) delete this.spawnedByKind[k];
     this.spawnTimer = SPAWN_CONFIG.firstDelay;
     this.navTimer = 0;
     this.spawnTimes.length = 0;
@@ -80,11 +129,9 @@ export class ZombieManager {
   setDifficulty(params: WaveParams): void {
     this.difficulty = params;
     const base = ZOMBIE_TYPES.walker;
-    this.scaledStats = {
-      ...base,
-      maxHealth: Math.round(base.maxHealth * params.healthMultiplier),
-      moveSpeed: +(base.moveSpeed * params.speedMultiplier).toFixed(3),
-    };
+    this.scaledStats = scaleForWave(base, params.healthMultiplier, params.speedMultiplier);
+    this.scaledKinds.walker = this.scaledStats;
+    for (const k of SPAWN_KINDS) if (k !== 'walker') this.scaledKinds[k] = scaleForWave(ENEMY_TYPES[k], params.healthMultiplier, params.speedMultiplier);
     // 첫 생성 대기 중이 아니면, 남은 대기 시간이 새 간격보다 길지 않게
     if (this.spawned > 0 && this.spawnTimer > params.spawnInterval) this.spawnTimer = params.spawnInterval;
   }
@@ -92,6 +139,81 @@ export class ZombieManager {
   /** 현재 웨이브 기준 좀비 능력치 */
   get currentStats(): ZombieStats {
     return this.scaledStats;
+  }
+
+  /** 현재 웨이브 기준 종류별 능력치 (엘리트 변형 선택) */
+  statsFor(kind: SpawnKind, elite = false): ZombieStats {
+    const base = this.scaledKinds[kind] ?? scaleForWave(ENEMY_TYPES[kind], this.difficulty.healthMultiplier, this.difficulty.speedMultiplier);
+    return elite ? makeElite(base) : base;
+  }
+
+  /** 보스가 살아 있으면 일반 좀비 수 · 생성 간격 조정 */
+  get effectiveMaxAlive(): number {
+    return this.boss ? Math.max(4, Math.floor(this.difficulty.maxAlive * BOSS_CONFIG.aliveMaxMul)) : this.difficulty.maxAlive;
+  }
+
+  get effectiveInterval(): number {
+    return this.boss ? this.difficulty.spawnInterval * BOSS_CONFIG.intervalMul : this.difficulty.spawnInterval;
+  }
+
+  /**
+   * 이번 생성의 종류: 해금된 종류의 가중치로 무작위 선택, 동시 출현 상한에 걸린 종류는 제외.
+   * 웨이브 7 이후 일정 확률로 엘리트 (동시 엘리트 수 제한).
+   */
+  pickSpawn(): ZombieStats {
+    const wave = this.difficulty.wave;
+    let total = 0;
+    const weights: number[] = [];
+    for (const k of SPAWN_KINDS) {
+      let w = spawnWeight(k, wave);
+      if (w > 0 && k !== 'walker' && this.aliveOf(k) >= spawnCap(k, wave)) w = 0;
+      weights.push(w);
+      total += w;
+    }
+    let r = this.random() * total;
+    let kind: SpawnKind = 'walker';
+    for (let i = 0; i < SPAWN_KINDS.length; i++) {
+      r -= weights[i];
+      if (r <= 0 && weights[i] > 0) { kind = SPAWN_KINDS[i]; break; }
+    }
+    const maxElite = wave >= ELITE_CONFIG.lateWave ? ELITE_CONFIG.maxAliveLate : ELITE_CONFIG.maxAlive;
+    const elite = ELITE_CONFIG.kinds.includes(kind) && this.eliteAlive < maxElite && this.random() < eliteChance(wave);
+    return this.statsFor(kind, elite);
+  }
+
+  /** 종류를 지정해 생성 (위치 지정: 조건 검사 없음 · 테스트 · 디버그) */
+  spawnKind(kind: EnemyKind, x: number, z: number, opts: { elite?: boolean; bossIndex?: number } = {}): Zombie {
+    const stats = kind === 'boss' ? bossStats(opts.bossIndex ?? 1) : this.statsFor(kind, opts.elite);
+    return this.spawnAt(x, z, stats);
+  }
+
+  /**
+   * 보스 생성: 안전한 위치(플레이어에서 BOSS_CONFIG.minDistance 이상, 주변이 넓고 경로가 있는 곳).
+   * 이미 살아 있는 보스가 있으면 생성하지 않는다 (null). 화면 안이어도 되며 땅에서 천천히 올라온다.
+   */
+  spawnBoss(index: number, camera: THREE.Camera): Zombie | null {
+    if (this.boss) return null;
+    const stats = bossStats(index);
+    const c = BOSS_CONFIG;
+    const p = this.ctx.target.position;
+    let best: [number, number] | null = null;
+    let bestScore = -Infinity;
+    for (let attempt = 0; attempt < 120; attempt++) {
+      const a = this.random() * Math.PI * 2;
+      const d = c.minDistance + this.random() * (c.maxDistance - c.minDistance);
+      const x = p.x + Math.sin(a) * d;
+      const z = p.z + Math.cos(a) * d;
+      if (Math.abs(x) > this.collision.bound - c.clearance || Math.abs(z) > this.collision.bound - c.clearance) continue;
+      if (!this.nav.isFree(x, z)) continue;
+      if (this.collision.overlapsCircle(x, z, c.clearance)) continue;
+      const path = this.nav.pathDistance(x, z);
+      if (!Number.isFinite(path) || path > d * 2) continue;
+      // 화면 안에 보이는 쪽을 약간 선호 (등장 연출이 보이도록), 경로가 직선에 가까울수록 선호
+      const score = (this.onScreen(x, z, camera) ? 1 : 0) - (path / d) + this.random() * 0.5;
+      if (score > bestScore) { bestScore = score; best = [x, z]; }
+    }
+    if (!best) return null;
+    return this.spawnAt(best[0], best[1], stats);
   }
 
   /** 게임 로직 스텝 (고정 간격) */
@@ -110,9 +232,9 @@ export class ZombieManager {
     if (allowSpawn && this.spawningEnabled) {
       this.spawnTimer -= dt;
       if (this.spawnTimer <= 0) {
-        if (this.aliveCount < this.difficulty.maxAlive) {
-          if (this.trySpawn(this.scaledStats, camera)) {
-            this.spawnTimer += this.difficulty.spawnInterval;
+        if (this.aliveCount - (this.boss ? 1 : 0) < this.effectiveMaxAlive) {
+          if (this.trySpawn(this.pickSpawn(), camera)) {
+            this.spawnTimer += this.effectiveInterval;
             this.spawnTimes.push(time);
             if (this.spawnTimes.length > 200) this.spawnTimes.shift();
           }
@@ -154,7 +276,15 @@ export class ZombieManager {
   private handleDeath(z: Zombie): void {
     if (this.countedDeaths.has(z.id)) return;
     this.countedDeaths.add(z.id);
+    if (z.exploded) {
+      // 자폭: 처치가 아니므로 처치 수 · 경험치 없음
+      this.registry.remove(z);
+      this.onSelfDestruct?.(z);
+      return;
+    }
     this.kills++;
+    if (z.stats.elite) this.eliteKills++;
+    if (z.stats.kind === 'boss') this.bossKills++;
     this.registry.remove(z); // 죽은 좀비는 더 이상 총알 판정 대상이 아님
     this.onKilled?.(z);
   }
@@ -223,6 +353,8 @@ export class ZombieManager {
     this.zombies.push(zb);
     this.registry.add(zb);
     this.spawned++;
+    this.spawnedByKind[stats.kind] = (this.spawnedByKind[stats.kind] ?? 0) + 1;
+    if (stats.elite) this.spawnedByKind.elite = (this.spawnedByKind.elite ?? 0) + 1;
     this.onSpawned?.(zb);
     return zb;
   }
@@ -257,9 +389,9 @@ export class ZombieManager {
           const nx = d2 > 1e-8 ? dx / d : Math.cos(a.id);
           const nz = d2 > 1e-8 ? dz / d : Math.sin(a.id);
           const pen = (min - d) * 0.5;
-          // 공격 중인 좀비는 덜 밀림 (공격 자세 유지)
-          const wa = a.state === ZombieState.Attack ? 0.3 : 1;
-          const wb = b.state === ZombieState.Attack ? 0.3 : 1;
+          // 공격 중인 좀비 · 무거운 좀비(탱커 · 보스)는 덜 밀림
+          const wa = (a.state === ZombieState.Attack || a.state === ZombieState.Special ? 0.3 : 1) / a.stats.mass;
+          const wb = (b.state === ZombieState.Attack || b.state === ZombieState.Special ? 0.3 : 1) / b.stats.mass;
           const sum = wa + wb;
           a.position.x -= nx * pen * 2 * (wa / sum);
           a.position.z -= nz * pen * 2 * (wa / sum);
@@ -293,7 +425,7 @@ export class ZombieManager {
       corpses++;
       if (corpses > SPAWN_CONFIG.maxCorpses && !z.sinking) { z.sinking = true; z.deadTime = Math.max(z.deadTime, z.stats.corpseTime); }
       if (z.deadTime >= z.stats.corpseTime) z.sinking = true;
-      if (z.deadTime >= z.stats.corpseTime + 1.2) {
+      if (z.deadTime >= z.stats.corpseTime + (z.exploded ? 0 : 1.2)) {
         this.zombies.splice(i, 1);
         this.release(z);
       }

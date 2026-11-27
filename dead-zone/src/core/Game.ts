@@ -10,6 +10,11 @@ import { PlayerModel } from '../player/PlayerModel';
 import { Zombie } from '../enemies/Zombie';
 import { ZombieManager } from '../enemies/ZombieManager';
 import { ZombieRenderer } from '../enemies/ZombieRenderer';
+import { EnemyProjectiles } from '../enemies/EnemyProjectiles';
+import { EnemyTelegraphs } from '../enemies/EnemyTelegraphs';
+import { BossDirector } from '../enemies/BossDirector';
+import { BOSS_REWARD, BossReward } from '../enemies/EnemyData';
+import { slamRadius } from '../enemies/EnemyBehaviors';
 import { DebugPanel } from '../ui/DebugPanel';
 import { GameUI, LoadoutSlot } from '../ui/GameUI';
 import { ProjectileSystem } from '../weapons/Projectile';
@@ -66,6 +71,15 @@ export class Game {
   }
   readonly zombies: ZombieManager;
   readonly zombieRenderer: ZombieRenderer;
+  /** 스피터 독성 투사체 */
+  readonly enemyShots: EnemyProjectiles;
+  /** 적 공격 위험 범위 표시 */
+  readonly telegraphs: EnemyTelegraphs;
+  /** 보스 등장 관리 (5웨이브마다) */
+  readonly bosses = new BossDirector();
+  /** 보스 처치 보상 (향후 희귀 무기 · 특별 강화). 지급 직후 호출 */
+  onBossDefeated: ((reward: BossReward) => void) | null = null;
+  lastBossReward: BossReward | null = null;
   readonly projectiles: ProjectileSystem;
   readonly effects: Effects;
   readonly ui = new GameUI();
@@ -140,6 +154,8 @@ export class Game {
 
     this.zombies = new ZombieManager(this.world.collision, this.registry, this.player);
     this.zombieRenderer = new ZombieRenderer(this.scene, ZOMBIE_TYPES.walker.appearance);
+    this.enemyShots = new EnemyProjectiles(this.scene, this.world.collision, this.player);
+    this.telegraphs = new EnemyTelegraphs(this.scene);
     this.orbs = new ExperienceOrbs(this.scene);
     this.wireEvents();
     this.upgrades.reset(); // 기본 능력치를 각 시스템에 적용
@@ -222,6 +238,8 @@ export class Game {
         this.melee.step(step, { x: this.player.position.x, z: this.player.position.z, yaw: this.player.aimYaw });
         this.projectiles.step(step);
         this.zombies.step(step, this.time, this.gameCamera.camera);
+        this.enemyShots.step(step);
+        this.bosses.step(step, this.zombies, this.gameCamera.camera, !this.player.dead);
         // 경험치 결정 흡수 → 경험치 (레벨업은 아래에서 상태 전환)
         this.orbs.step(step, this.player.position.x, this.player.position.z, this.upgrades.stats.pickupRadius, (v) => this.experience.collect(v));
         if (this.melee.busy && this.player.dead) this.melee.reset();
@@ -271,6 +289,12 @@ export class Game {
     this.projectiles.clear();
     this.effects.clear();
     this.zombies.reset();
+    this.enemyShots.clear();
+    this.telegraphs.clear();
+    this.bosses.reset();
+    this.lastBossReward = null;
+    this.ui.setBoss(null);
+    this.ui.hideAlert();
     this.time = 0;
     this.lastShotTime = -10;
     this.lastRun = null;
@@ -445,6 +469,8 @@ export class Game {
     this.projectiles.dispose();
     this.effects.dispose();
     this.zombieRenderer.dispose();
+    this.enemyShots.dispose();
+    this.telegraphs.dispose();
     this.model.dispose();
     this.world.dispose();
     this.audio.dispose();
@@ -594,12 +620,31 @@ export class Game {
 
     // 좀비 처치 · 플레이어 피격 · 사망
     this.zombies.onKilled = (z) => {
-      this.orbs.spawn(z.position.x, z.position.z, z.stats.xp);
+      this.dropXp(z);
       this.effects.zombieDeath(z.position);
       this.audio.bodyFall();
       this.ui.flashHit(true);
       this.ui.setKills(this.zombies.kills);
+      if (z.stats.kind === 'boss') this.rewardBoss(z);
+      else if (z.stats.elite) this.ui.toast(`${z.stats.name} 처치 — 경험치 ${z.stats.xp}`);
     };
+    this.zombies.onSpawned = (z) => {
+      if (z.stats.elite) { this.ui.toast(`⚠ ${z.stats.name} 출현!`); this.audio.warn(0.8); }
+    };
+    this.bosses.onSpawn = (boss, wave, index) => {
+      this.ui.showAlert(boss.stats.name, index > 1 ? `WAVE ${wave} · 강화 보스 (${index}번째)` : `WAVE ${wave} · 보스 등장`, 'boss');
+      this.audio.roar(true);
+      this.effects.dustBurst(boss.position, 3);
+      this.gameCamera.shake(0.25);
+    };
+    this.zombies.events = {
+      canSpit: () => this.enemyShots.canFire(),
+      spit: (z, x, y, zz, dx, dz, speed, radius, damage) => {
+        if (this.enemyShots.fire(x, y, zz, dx, dz, speed, radius, damage, (z.stats.ranged?.range ?? 12) + 2, `zombie:${z.stats.id}`)) this.audio.spit();
+      },
+      emit: (type, z, value = 0) => this.onEnemyEvent(type, z, value),
+    };
+    this.enemyShots.onImpact = (x, y, z) => this.effects.toxicSplash(x, y, z);
     this.player.onDamaged = () => {
       this.ui.hurt();
       this.model.flashHurt();
@@ -621,6 +666,7 @@ export class Game {
     this.waves.onWaveStart = (params) => {
       this.zombies.setDifficulty(params);
       this.ui.showWaveBanner(params.wave);
+      this.bosses.onWave(params.wave, this.zombies);
     };
 
     this.input.onPointerMove = (x, y) => this.ui.moveCursor(x, y);
@@ -686,6 +732,70 @@ export class Game {
     });
   }
 
+  /** 처치 경험치: 일반 경험치 결정으로 떨어뜨림. 큰 경험치(엘리트 · 보스)는 여러 개로 나눠 흩뿌림 */
+  private dropXp(z: Zombie): void {
+    const xp = z.stats.xp;
+    if (xp <= 30) { this.orbs.spawn(z.position.x, z.position.z, xp); return; }
+    const n = Math.min(10, Math.ceil(xp / 30));
+    const r = 0.5 + z.stats.radius;
+    let left = xp;
+    for (let i = 0; i < n; i++) {
+      const v = i === n - 1 ? left : Math.floor(xp / n);
+      left -= v;
+      const a = (i / n) * Math.PI * 2 + z.variant * 6;
+      this.orbs.spawn(z.position.x + Math.sin(a) * r * (0.6 + (i % 2) * 0.4), z.position.z + Math.cos(a) * r * (0.6 + (i % 2) * 0.4), v);
+    }
+  }
+
+  /** 보스 처치 보상: 경험치(결정으로 이미 떨어짐) + 체력 회복(최대 체력까지) + 알림 + 확장 훅 */
+  private rewardBoss(z: Zombie): void {
+    const healed = this.player.heal(BOSS_REWARD.heal);
+    const reward: BossReward = { xp: z.stats.xp, heal: healed, items: [...BOSS_REWARD.items] };
+    this.lastBossReward = reward;
+    this.ui.showAlert('BOSS DEFEATED', `${z.stats.name} 처치 · 경험치 +${reward.xp} · 체력 +${Math.round(healed)}`, 'defeat');
+    this.effects.bossRoar(z.position, 0xffc060);
+    this.onBossDefeated?.(reward);
+  }
+
+  /** 적 특수 행동 사건 → 이펙트 · 사운드 · 화면 흔들림 */
+  private onEnemyEvent(type: string, z: Zombie, value: number): void {
+    const d = Math.hypot(z.position.x - this.player.position.x, z.position.z - this.player.position.z);
+    const near = Math.max(0, 1 - d / 28);
+    switch (type) {
+      case 'prime': this.audio.warn(1.2); break;
+      case 'explode':
+        this.effects.explosion(z.position, z.stats.explode?.radius ?? 4);
+        this.audio.explosion();
+        this.gameCamera.shake(0.4 * near);
+        break;
+      case 'slam':
+        this.effects.groundSlam(z.position, slamRadius(z), z.phase >= 2 ? 0xff2a40 : 0xff5a30);
+        this.audio.thud(1.2);
+        this.gameCamera.shake(0.45 * near);
+        break;
+      case 'bossSwing':
+        this.effects.shockwave(z.position.x + Math.sin(z.yaw) * 2, z.position.z + Math.cos(z.yaw) * 2, 2.2, 0xffa060, 0.3, 0.6);
+        this.audio.thud(0.6);
+        this.gameCamera.shake((value ? 0.3 : 0.15) * near);
+        break;
+      case 'roar': this.audio.roar(false); break;
+      case 'chargeStart': this.audio.roar(false); break;
+      case 'chargeHit': this.gameCamera.shake(0.35); break;
+      case 'chargeWall':
+        this.effects.dustBurst(z.position, z.stats.radius * 2);
+        this.effects.shockwave(z.position.x, z.position.z, 3, 0xffc080, 0.35, 0.5);
+        this.audio.thud(1);
+        this.gameCamera.shake(0.3 * near);
+        break;
+      case 'phase2':
+        this.effects.bossRoar(z.position, 0xff2a40);
+        this.audio.roar(true);
+        this.ui.showAlert(z.stats.name, 'PHASE 2 — 분노', 'phase');
+        this.gameCamera.shake(0.3);
+        break;
+    }
+  }
+
   /** 시각 계층 갱신 + 렌더 (로직 상태는 읽기만 한다) */
   private renderFrame(dt: number, alpha: number, draw = true): void {
     const p = this.player;
@@ -711,6 +821,10 @@ export class Game {
 
     this.projectiles.render(alpha);
     this.zombieRenderer.update(dt, this.zombies.zombies, alpha, this.gameCamera.camera);
+    this.enemyShots.render(alpha);
+    this.telegraphs.update(dt, this.zombies.zombies, this.zombies.context);
+    const boss = this.zombies.boss;
+    this.ui.setBoss(boss ? { name: boss.stats.name, health: boss.health, maxHealth: boss.maxHealth, phase: boss.phase } : null);
     this.effects.update(dt, this.gameCamera.camera);
 
     this.ui.setWaveStatus(this.waves.wave, this.waves.time, this.zombies.aliveCount);
@@ -779,7 +893,9 @@ export class Game {
       ['총기 능력치', (() => { const st = this.weapon.stats; return `${st.name}: 피해 ${st.damage.toFixed(1)}${st.pellets > 1 ? `×${st.pellets}` : ''} · 연사 ${st.fireRate.toFixed(1)} · 탄창 ${st.magazineSize} · 장전 ${st.reloadTime.toFixed(2)}s · 관통 ${st.pierce} · 치명 ${Math.round(this.weapons.mods.critChance * 100)}%`; })()],
       ['근접 능력치', (() => { const st = this.weapons.meleeStats; return `${MELEE[this.weapons.meleeId].name}: 피해 ${st.damage.toFixed(1)} · 간격 ${st.interval.toFixed(2)}s · 사거리 ${st.range.toFixed(2)} · ${st.arcDeg}° · ${st.maxTargets}마리 · 넉백 ${st.knockback.toFixed(1)}`; })()],
       ['웨이브', `${this.waves.wave} (${formatTime(this.waves.time)}) · 간격 ${this.zombies.difficulty.spawnInterval}s · 상한 ${this.zombies.difficulty.maxAlive} · 체력 ×${this.zombies.difficulty.healthMultiplier}`],
-      ['좀비', `생존 ${this.zombies.aliveCount} · 시체 ${this.zombies.corpseCount} · 처치 ${this.zombies.kills} · 생성 ${this.zombies.spawned}`],
+      ['좀비', `생존 ${this.zombies.aliveCount} · 시체 ${this.zombies.corpseCount} · 처치 ${this.zombies.kills} · 생성 ${this.zombies.spawned} · 화면 밖 ${this.zombieRenderer.culled}`],
+      ['적 종류', (['runner', 'spitter', 'tank', 'exploder'] as const).map((k) => `${k} ${this.zombies.aliveOf(k)}`).join(' · ') + ` · 엘리트 ${this.zombies.eliteAlive} · 보스 ${this.zombies.boss ? `${Math.ceil(this.zombies.boss.health)} P${this.zombies.boss.phase}` : '-'}`],
+      ['적 투사체', `${this.enemyShots.activeCount} (발사 ${this.enemyShots.stats.fired} · 명중 ${this.enemyShots.stats.hitPlayer} · 벽 ${this.enemyShots.stats.hitWall})`],
       ['AI 시간', `${this.zombies.aiMs.toFixed(3)}ms / 스텝 · 경로 ${this.zombies.nav.lastBuildMs.toFixed(2)}ms (${this.zombies.nav.builds}회)`],
       ['렌더 배율', `${this.pixelRatio.toFixed(2)} (${this.renderer.domElement.width}×${this.renderer.domElement.height})`],
       ['드로우콜', String(info.render.calls)],

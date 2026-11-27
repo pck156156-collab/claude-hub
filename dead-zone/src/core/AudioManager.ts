@@ -122,6 +122,68 @@ export class AudioManager {
     this.noiseBurst(t, 0.12, 600, 0.6, 'lowpass', 1);
   }
 
+  /** 폭발 좀비 폭발: 큰 저음 + 잡음 */
+  explosion(): void {
+    const c = this.ready();
+    if (!c) return;
+    const t = c.currentTime;
+    this.noiseBurst(t, 0.7, 700, 1.2, 'lowpass', 0.7);
+    this.noiseBurst(t, 0.15, 3000, 0.4, 'bandpass', 0.8);
+    this.tone(t, 'sine', 90, 30, 1.0, 0.6);
+  }
+
+  /** 보스 지면 강타 · 돌진 충돌: 묵직한 쿵 */
+  thud(weight = 1): void {
+    const c = this.ready();
+    if (!c) return;
+    const t = c.currentTime;
+    this.tone(t, 'sine', 70 * (1.2 - weight * 0.2), 28, 0.9 * weight, 0.45);
+    this.noiseBurst(t, 0.35, 300, 0.7 * weight, 'lowpass', 0.8);
+  }
+
+  /** 보스 포효 · 강타 준비 (pitch 낮을수록 크고 거친 소리) */
+  roar(big = false): void {
+    const c = this.ready();
+    if (!c) return;
+    const t = c.currentTime;
+    const len = big ? 1.3 : 0.6;
+    this.tone(t, 'sawtooth', big ? 120 : 150, big ? 55 : 80, big ? 0.35 : 0.2, len);
+    this.tone(t, 'square', big ? 61 : 76, big ? 40 : 50, big ? 0.12 : 0.07, len);
+    this.noiseBurst(t, len, 500, big ? 0.5 : 0.3, 'bandpass', 1.2);
+  }
+
+  /** 스피터 침 뱉기 */
+  spit(): void {
+    const c = this.ready();
+    if (!c) return;
+    const t = c.currentTime;
+    this.noiseBurst(t, 0.18, 1400, 0.45, 'bandpass', 3);
+    this.tone(t, 'triangle', 420, 160, 0.15, 0.16);
+  }
+
+  /** 폭발 좀비 준비 · 엘리트 등장 등 경고음 */
+  warn(pitch = 1): void {
+    const c = this.ready();
+    if (!c) return;
+    const t = c.currentTime;
+    this.tone(t, 'square', 880 * pitch, 860 * pitch, 0.06, 0.12);
+    this.tone(t + 0.16, 'square', 880 * pitch, 860 * pitch, 0.06, 0.12);
+  }
+
+  private tone(t: number, type: OscillatorType, f0: number, f1: number, vol: number, dur: number): void {
+    const c = this.ctx!;
+    const o = c.createOscillator();
+    const g = c.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(f0, t);
+    o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g).connect(this.master!);
+    o.start(t);
+    o.stop(t + dur + 0.02);
+  }
+
   dispose(): void {
     void this.ctx?.close();
     this.ctx = null;

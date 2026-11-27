@@ -66,6 +66,8 @@ export class Effects {
     this.flash.visible = true;
     this.flashTimer = EFFECTS_CONFIG.muzzleFlashTime;
     this.flashLight.position.copy(pos);
+    this.flashLight.color.setHex(0xffb45c);
+    this.lightTimer = 0;
     this.flashLight.intensity = 14 * Math.min(1.6, scale);
 
     const fx = Math.sin(yaw);
@@ -212,6 +214,143 @@ export class Effects {
     }
   }
 
+  // ── 6단계: 특수 좀비 · 보스 효과
+  private readonly waves: { mesh: THREE.Mesh; life: number; maxLife: number; radius: number; alpha: number }[] = [];
+  private waveCursor = 0;
+  private waveGeometry: THREE.BufferGeometry | null = null;
+  private lightTimer = 0;
+  private lightMax = 1;
+  private lightPeak = 0;
+
+  /** 바닥을 따라 퍼지는 충격파 고리 (반경 radius 까지) */
+  shockwave(x: number, z: number, radius: number, color: number, life = 0.45, alpha = 0.85): void {
+    if (!this.waveGeometry) {
+      this.waveGeometry = new THREE.RingGeometry(0.82, 1, 48).rotateX(-Math.PI / 2);
+      for (let i = 0; i < 6; i++) {
+        const m = new THREE.Mesh(this.waveGeometry, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, side: THREE.DoubleSide }));
+        m.visible = false;
+        m.renderOrder = 6;
+        m.frustumCulled = false;
+        this.scene.add(m);
+        this.waves.push({ mesh: m, life: 0, maxLife: 1, radius: 1, alpha: 1 });
+      }
+    }
+    const w = this.waves[this.waveCursor];
+    this.waveCursor = (this.waveCursor + 1) % this.waves.length;
+    w.mesh.position.set(x, 0.06, z);
+    (w.mesh.material as THREE.MeshBasicMaterial).color.setHex(color);
+    w.life = w.maxLife = life;
+    w.radius = radius;
+    w.alpha = alpha;
+    w.mesh.visible = true;
+  }
+
+  /** 순간 섬광 (폭발 · 강타) */
+  private burstLight(x: number, y: number, z: number, color: number, intensity: number, time: number): void {
+    this.flashLight.position.set(x, y, z);
+    this.flashLight.color.setHex(color);
+    this.flashLight.intensity = this.lightPeak = intensity;
+    this.lightTimer = this.lightMax = time;
+    this.flashTimer = 0;
+  }
+
+  /** 폭발 좀비 폭발: 불꽃 + 연기 + 파편 + 충격파 (반경 = 실제 피해 반경) */
+  explosion(center: THREE.Vector3, radius: number): void {
+    const y = 0.9;
+    for (let i = 0; i < 46; i++) {
+      const v = randomHemisphere(new THREE.Vector3(0, 0.6, 0), 1);
+      const sp = 4 + Math.random() * 9;
+      const hot = Math.random();
+      this.sparks.spawn({
+        x: center.x, y, z: center.z, vx: v.x * sp, vy: v.y * sp, vz: v.z * sp,
+        life: 0.3 + Math.random() * 0.35, size: 1, endScale: 0.2, drag: 3, gravity: 9, stretch: 0.04,
+        shape: [0.07, 0.07, 0.14], color: tmpColor.setRGB(1.8, 0.7 + hot * 0.8, 0.15 + hot * 0.2),
+      });
+    }
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14) * Math.PI * 2;
+      const sp = radius * (0.8 + Math.random() * 0.6);
+      this.smoke.spawn({
+        x: center.x, y: 0.5 + Math.random() * 0.6, z: center.z, vx: Math.cos(a) * sp, vy: 0.6 + Math.random(), vz: Math.sin(a) * sp,
+        life: 1.0 + Math.random() * 0.6, size: 0.9, endScale: 3.2, drag: 2.6, spin: 0.6, color: tmpColor.setRGB(0.32, 0.26, 0.2),
+      });
+    }
+    for (let i = 0; i < 12; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = 3 + Math.random() * 5;
+      this.debris.spawn({
+        x: center.x, y: 0.8, z: center.z, vx: Math.cos(a) * sp, vy: 3 + Math.random() * 4, vz: Math.sin(a) * sp,
+        life: 1.6, size: 1, endScale: 1, gravity: 18, bounce: 0.3, spin: 10, shape: [0.12, 0.08, 0.1],
+        color: tmpColor.setRGB(0.45, 0.2, 0.15),
+      });
+    }
+    this.shockwave(center.x, center.z, radius, 0xff8a30, 0.4);
+    this.burstLight(center.x, 1.4, center.z, 0xff9040, 40, 0.25);
+  }
+
+  /** 보스 지면 강타: 먼지 고리 + 바위 파편 + 충격파 (반경 = 실제 피해 반경) */
+  groundSlam(center: THREE.Vector3, radius: number, color = 0xff5a30): void {
+    const n = Math.round(10 + radius * 3);
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      const sp = radius * (1.0 + Math.random() * 0.5);
+      this.smoke.spawn({
+        x: center.x + Math.cos(a) * 0.8, y: 0.3, z: center.z + Math.sin(a) * 0.8, vx: Math.cos(a) * sp, vy: 0.4, vz: Math.sin(a) * sp,
+        life: 0.9 + Math.random() * 0.5, size: 0.8, endScale: 2.8, drag: 2.8, spin: 0.5, color: tmpColor.setRGB(0.5, 0.45, 0.38),
+      });
+    }
+    for (let i = 0; i < 16; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = Math.random() * radius * 0.7;
+      this.debris.spawn({
+        x: center.x + Math.cos(a) * r, y: 0.1, z: center.z + Math.sin(a) * r, vx: Math.cos(a) * 1.5, vy: 4 + Math.random() * 4, vz: Math.sin(a) * 1.5,
+        life: 1.4, size: 1, endScale: 1, gravity: 20, bounce: 0.25, spin: 8, shape: [0.16, 0.1, 0.14], color: tmpColor.setRGB(0.35, 0.33, 0.3),
+      });
+    }
+    this.shockwave(center.x, center.z, radius, color, 0.5);
+    this.burstLight(center.x, 1, center.z, 0xffa060, 18, 0.18);
+  }
+
+  /** 독성 투사체 충돌: 초록 방울 */
+  toxicSplash(x: number, y: number, z: number): void {
+    for (let i = 0; i < 12; i++) {
+      const v = randomHemisphere(new THREE.Vector3(0, 1, 0), 1.2);
+      const sp = 1.5 + Math.random() * 3;
+      this.sparks.spawn({
+        x, y, z, vx: v.x * sp, vy: v.y * sp, vz: v.z * sp,
+        life: 0.35, size: 1, endScale: 0.3, drag: 2, gravity: 10, stretch: 0.02, shape: [0.06, 0.06, 0.06], color: tmpColor.setRGB(0.45, 1.5, 0.2),
+      });
+    }
+    this.smoke.spawn({ x, y: Math.max(0.2, y - 0.3), z, vx: 0, vy: 0.3, vz: 0, life: 0.7, size: 0.5, endScale: 2.2, drag: 2, spin: 0.4, color: tmpColor.setRGB(0.35, 0.6, 0.2) });
+  }
+
+  /** 보스 등장 · 2페이즈 포효: 붉은 충격파 2겹 */
+  bossRoar(center: THREE.Vector3, color: number): void {
+    this.shockwave(center.x, center.z, 7, color, 0.6, 0.9);
+    this.shockwave(center.x, center.z, 11, color, 0.9, 0.5);
+    this.burstLight(center.x, 3, center.z, color, 30, 0.4);
+    for (let i = 0; i < 24; i++) {
+      const v = randomHemisphere(new THREE.Vector3(0, 1, 0), 1);
+      const sp = 3 + Math.random() * 5;
+      this.sparks.spawn({
+        x: center.x, y: 3, z: center.z, vx: v.x * sp, vy: v.y * sp, vz: v.z * sp,
+        life: 0.5, size: 1, endScale: 0.2, drag: 2, stretch: 0.03, shape: [0.06, 0.06, 0.12], color: tmpColor.setHex(color).multiplyScalar(1.6),
+      });
+    }
+  }
+
+  /** 보스가 땅에서 올라올 때 · 돌진이 벽에 부딪힐 때 먼지 */
+  dustBurst(center: THREE.Vector3, radius: number): void {
+    for (let i = 0; i < 10; i++) {
+      const a = Math.random() * Math.PI * 2;
+      this.smoke.spawn({
+        x: center.x + Math.cos(a) * radius * 0.5, y: 0.3, z: center.z + Math.sin(a) * radius * 0.5,
+        vx: Math.cos(a) * 1.4, vy: 0.5, vz: Math.sin(a) * 1.4,
+        life: 1.1, size: 0.9, endScale: 2.6, drag: 2.2, spin: 0.5, color: tmpColor.setRGB(0.45, 0.42, 0.36),
+      });
+    }
+  }
+
   private readonly arcs: { mesh: THREE.Mesh; life: number; maxLife: number }[] = [];
   private arcCursor = 0;
   private readonly arcGeometries = new Map<number, THREE.BufferGeometry>();
@@ -231,6 +370,21 @@ export class Effects {
   }
 
   update(dt: number, camera: THREE.Camera): void {
+    for (const w of this.waves) {
+      if (w.life <= 0) continue;
+      w.life -= dt;
+      const k = Math.max(0, w.life / w.maxLife);
+      const r = w.radius * (0.25 + 0.75 * easeOutCubic(1 - k));
+      w.mesh.scale.set(r, 1, r);
+      (w.mesh.material as THREE.MeshBasicMaterial).opacity = w.alpha * k;
+      if (w.life <= 0) w.mesh.visible = false;
+    }
+    if (this.lightTimer > 0) {
+      this.lightTimer -= dt;
+      const k = Math.max(0, this.lightTimer / this.lightMax);
+      this.flashLight.intensity = this.lightPeak * k * k;
+      if (this.lightTimer <= 0) { this.flashLight.intensity = 0; this.flashLight.color.setHex(0xffb45c); }
+    }
     for (const a of this.arcs) {
       if (a.life <= 0) continue;
       a.life -= dt;
@@ -255,6 +409,9 @@ export class Effects {
 
   clear(): void {
     for (const a of this.arcs) { a.life = 0; a.mesh.visible = false; }
+    for (const w of this.waves) { w.life = 0; w.mesh.visible = false; }
+    this.lightTimer = 0;
+    this.flashLight.color.setHex(0xffb45c);
     for (const p of [this.sparks, this.debris, this.casings, this.smoke]) p.clear();
     this.flash.visible = false;
     this.flashLight.intensity = 0;
@@ -263,6 +420,8 @@ export class Effects {
 
   dispose(): void {
     for (const a of this.arcs) { this.scene.remove(a.mesh); (a.mesh.material as THREE.Material).dispose(); }
+    for (const w of this.waves) { this.scene.remove(w.mesh); (w.mesh.material as THREE.Material).dispose(); }
+    this.waveGeometry?.dispose();
     for (const g of this.arcGeometries.values()) g.dispose();
     for (const p of [this.sparks, this.debris, this.casings, this.smoke]) p.dispose();
     this.flash.traverse((o) => {
@@ -272,6 +431,10 @@ export class Effects {
     this.scene.remove(this.flash, this.flashLight);
     this.flashLight.dispose();
   }
+}
+
+function easeOutCubic(t: number): number {
+  return 1 - Math.pow(1 - t, 3);
 }
 
 const hemi = new THREE.Vector3();

@@ -62,6 +62,15 @@ export class GameUI {
   private readonly upgradeList = $('upgrade-list');
   private readonly slotEls = [$('slot-0'), $('slot-1'), $('melee-slot')];
   private readonly toastEl = $('toast');
+  private readonly bossHud = $('boss-hud');
+  private readonly bossName = $('boss-name');
+  private readonly bossPhase = $('boss-phase');
+  private readonly bossFill = $('boss-fill');
+  private readonly bossTrail = $('boss-trail');
+  private readonly bossHp = $('boss-hp');
+  private readonly alertEl = $('alert-banner');
+  private readonly alertTitle = $('ab-title');
+  private readonly alertSub = $('ab-sub');
   private readonly pauseReason = $('pause-reason');
   private readonly last: Partial<Record<string, unknown>> = {};
   private pipEls: HTMLElement[] = [];
@@ -143,6 +152,37 @@ export class GameUI {
   toast(text: string): void {
     this.toastEl.textContent = text;
     restartAnimation(this.toastEl, 'show');
+  }
+
+  /** 보스 체력바 (화면 상단). null 이면 숨김 */
+  setBoss(info: { name: string; health: number; maxHealth: number; phase: number } | null): void {
+    if (!info) {
+      this.set('boss', null, () => { this.bossHud.hidden = true; });
+      return;
+    }
+    const ratio = Math.max(0, info.health / info.maxHealth);
+    this.set('boss', `${info.name}|${Math.ceil(info.health)}|${info.phase}`, () => {
+      this.bossHud.hidden = false;
+      this.bossName.textContent = info.name;
+      this.bossPhase.textContent = info.phase >= 2 ? 'PHASE 2 · 분노' : '';
+      this.bossHud.classList.toggle('p2', info.phase >= 2);
+      this.bossFill.style.width = `${ratio * 100}%`;
+      this.bossTrail.style.width = `${ratio * 100}%`;
+      this.bossHp.textContent = `${Math.ceil(info.health).toLocaleString()} / ${info.maxHealth.toLocaleString()}`;
+    });
+  }
+
+  /** 화면 상단 큰 알림 (보스 등장 · 페이즈 전환 · 보스 처치) */
+  showAlert(title: string, sub: string, kind: 'boss' | 'phase' | 'defeat' = 'boss'): void {
+    this.alertTitle.textContent = title;
+    this.alertSub.textContent = sub;
+    this.alertEl.classList.remove('boss', 'phase', 'defeat');
+    this.alertEl.classList.add(kind);
+    restartAnimation(this.alertEl, 'show');
+  }
+
+  hideAlert(): void {
+    this.alertEl.classList.remove('show');
   }
 
   /** 레벨 · 경험치 게이지 */
