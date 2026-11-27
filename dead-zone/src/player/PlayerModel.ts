@@ -43,8 +43,8 @@ interface MeleeModel {
 const HIP_H = 0.92;
 const THIGH = 0.44;
 const SHIN = 0.42;
-const UPPER_ARM = 0.32;
-const FOREARM = 0.31;
+const UPPER_ARM = 0.335;
+const FOREARM = 0.33;
 /** 상체 기준 소총 위치: 총구 = muzzleOffset 이 되도록 맞춘다 */
 const MUZ = WEAPON_CONFIG.muzzleOffset;
 const GUN_TIP_Z = 0.72;
@@ -112,6 +112,8 @@ export class PlayerModel {
   private readonly kElbow = new THREE.Vector3();
   private readonly kPole = new THREE.Vector3();
   private readonly kShoulder = new THREE.Vector3();
+  /** 손이 손잡이에 닿지 못한 거리 (m) */
+  readonly handGap = { left: 0, right: 0 };
   private readonly kMeleeHand = new THREE.Vector3();
   private readonly kMeleeDir = new THREE.Vector3();
   private readonly reloadKeys: [number, THREE.Vector3][] = [0, 0.16, 0.3, 0.48, 0.66, 0.78, 0.9, 1].map((t) => [t, this.kHandguard]);
@@ -213,7 +215,7 @@ export class PlayerModel {
       const mag = mesh(box(0.045, 0.17, 0.08), M.gunMetal, g, 0, -0.12, 0.13);
       mag.rotation.x = 0.22;
       return mag;
-    }, [0, -0.075, 0.03], [0, -0.05, 0.36], [0.02, -0.14, 0.13]);
+    }, [0, -0.075, 0.03], [0, -0.05, 0.3], [0.02, -0.14, 0.13]);
     // P9 권총: 짧은 총, 두 손으로 앞으로 뻗어 잡음
     gunModel('p9', (g) => {
       mesh(box(0.042, 0.055, 0.21), M2.polymer, g, 0, 0.012, 0.615); // 슬라이드
@@ -230,7 +232,7 @@ export class PlayerModel {
       mesh(box(0.055, 0.065, 0.1), M.gunMetal, g, 0, 0.005, 0.6);
       mesh(cyl(0.014, 0.1), M.gunMetal, g, 0, 0.01, GUN_TIP_Z - 0.05);
       mesh(box(0.035, 0.09, 0.04), M2.polymer, g, 0, -0.085, 0.27).rotation.x = -0.3; // 손잡이
-      mesh(box(0.03, 0.08, 0.035), M2.polymer, g, 0, -0.08, 0.58); // 앞손잡이
+      mesh(box(0.03, 0.08, 0.035), M2.polymer, g, 0, -0.08, 0.47); // 앞손잡이
       mesh(box(0.012, 0.012, 0.22), M.gunMetal, g, 0.022, 0.015, 0.11); // 접이식 개머리
       mesh(box(0.012, 0.012, 0.22), M.gunMetal, g, -0.022, 0.015, 0.11);
       mesh(box(0.05, 0.07, 0.012), M.gunMetal, g, 0, -0.01, 0.0);
@@ -238,19 +240,19 @@ export class PlayerModel {
       const mag = mesh(box(0.032, 0.22, 0.045), M.gunMetal, g, 0, -0.15, 0.44);
       mag.rotation.x = 0.08;
       return mag;
-    }, [0, -0.09, 0.27], [0, -0.115, 0.58], [0, -0.06, 0.44]);
+    }, [0, -0.09, 0.27], [0, -0.115, 0.47], [0, -0.06, 0.44]);
     // Bulldog 샷건: 긴 총열 + 튜브 탄창 + 나무 펌프 · 개머리
     gunModel('bulldog', (g) => {
       mesh(box(0.07, 0.1, 0.26), M.gunMetal, g, 0, 0, 0.07);
       mesh(cyl(0.024, 0.5), M.gunMetal, g, 0, 0.022, 0.47);
       mesh(cyl(0.02, 0.44), M.gunMetal, g, 0, -0.03, 0.42);
-      mesh(box(0.068, 0.06, 0.17), M2.wood, g, 0, -0.03, 0.46); // 펌프
+      mesh(box(0.068, 0.06, 0.17), M2.wood, g, 0, -0.03, 0.31); // 펌프
       mesh(box(0.058, 0.13, 0.3), M2.wood, g, 0, -0.035, -0.2);
       mesh(box(0.04, 0.1, 0.05), M2.wood, g, 0, -0.09, -0.02).rotation.x = -0.4;
       mesh(box(0.01, 0.015, 0.01), M.gunMetal, g, 0, 0.05, GUN_TIP_Z - 0.02); // 비드
       const mag = mesh(box(0.024, 0.024, 0.065), M2.shell, g, 0.0, -0.07, 0.11); // 장전 중인 산탄
       return mag;
-    }, [0, -0.08, -0.02], [0, -0.065, 0.46], [0, -0.08, 0.11]);
+    }, [0, -0.08, -0.02], [0, -0.065, 0.31], [0, -0.08, 0.11]);
     // Titan LMG: 두꺼운 몸통, 옆 탄통, 손잡이, 접은 양각대
     gunModel('titan', (g) => {
       mesh(box(0.09, 0.13, 0.46), M2.olive, g, 0, 0, 0.1);
@@ -266,7 +268,7 @@ export class PlayerModel {
       mesh(box(0.012, 0.12, 0.012), M.strap, g, 0.0, -0.02, 0.32).rotation.x = 0.4; // 탄띠
       const mag = mesh(box(0.11, 0.13, 0.14), M2.olive, g, 0.07, -0.1, 0.12); // 탄통
       return mag;
-    }, [0, -0.09, -0.03], [0, -0.07, 0.42], [0.07, -0.08, 0.12]);
+    }, [0, -0.09, -0.03], [0, -0.07, 0.3], [0.07, -0.08, 0.12]);
     this.setGunModel('ar12');
     this.handMag = mesh(box(0.045, 0.17, 0.08), M.gunMetal, this.upper);
     this.handMag.visible = false;
@@ -350,7 +352,8 @@ export class PlayerModel {
   /** 사망 시작 / 해제 */
   setDead(dead: boolean): void {
     this.deathT = dead ? 0 : -1;
-    if (!dead) { this.root.rotation.x = 0; this.root.position.y = 0; this.hurt = 0; this.applyHurt(); }
+    // 부활: 쓰러질 때 기울인 회전(x · z)과 높이를 모두 되돌린다
+    if (!dead) { this.root.rotation.set(0, this.root.rotation.y, 0); this.root.position.y = 0; this.hurt = 0; this.applyHurt(); }
   }
 
   private applyHurt(): void {
@@ -396,6 +399,9 @@ export class PlayerModel {
       this.aimMarker.visible = false;
       s = { ...s, velocity: ZERO, aiming: false, reloading: false };
     } else {
+      // 살아 있는 동안은 항상 똑바로 선 자세 (사망 연출의 기울기가 남지 않게)
+      this.root.rotation.set(0, s.aimYaw, 0);
+      this.root.position.y = 0;
       this.aimMarker.visible = true;
     }
 
@@ -483,7 +489,7 @@ export class PlayerModel {
     this.gun.position.set(
       GUN_POS.x + low * 0.04 + rw * 0.05 - mb * 0.06,
       GUN_POS.y - low * 0.1 - rw * 0.06 - dip * 0.28 - mb * 0.08,
-      GUN_POS.z - this.recoil - low * 0.05 - rw * 0.08 - dip * 0.15 - mb * 0.12,
+      GUN_POS.z + GUNS[this.shownGun].holdZ - this.recoil - low * 0.05 - rw * 0.08 - dip * 0.15 - mb * 0.12,
     );
     this.gun.rotation.set(low * 0.55 - this.recoil * 1.1 - rw * 0.2 + dip * 0.9 + mb * 0.3, low * 0.25 + rw * 0.1 + mb * 0.3, rw * 0.55 + dip * 0.4);
     let chestYaw = CHEST_TWIST * (0.55 + 0.45 * this.aimBlend);
@@ -571,6 +577,8 @@ export class PlayerModel {
     const b = FOREARM;
     const toT = this.v4.subVectors(T, S);
     let d = toT.length();
+    // 손이 목표(손잡이)에 닿지 못한 거리 (0 이면 정확히 잡음) — 테스트 · 디버그용
+    this.handGap[side > 0 ? 'left' : 'right'] = Math.max(0, d - (a + b - 0.002));
     const u = toT.multiplyScalar(1 / (d || 1));
     d = clamp(d, 0.05, a + b - 0.002);
     const hand = this.kHand.copy(S).addScaledVector(u, d);

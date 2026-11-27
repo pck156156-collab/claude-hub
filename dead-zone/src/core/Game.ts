@@ -217,6 +217,7 @@ export class Game {
         this.player.step(step, cmd, this.world.collision);
         // 이동 중 퍼짐: 기본 이동 속도 대비 현재 속도
         this.shooter.moveRatio = this.player.speed / PLAYER_CONFIG.moveSpeed;
+        this.player.muzzleZOffset = GUNS[this.weapons.currentId].holdZ;
         this.weapons.update(step, this.controller.fire, this.melee.busy);
         this.melee.step(step, { x: this.player.position.x, z: this.player.position.z, yaw: this.player.aimYaw });
         this.projectiles.step(step);

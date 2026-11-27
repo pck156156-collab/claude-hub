@@ -76,6 +76,9 @@ export class Player {
     return true;
   }
 
+  /** 들고 있는 총에 따른 총구 앞뒤 보정 (짧은 총은 몸 쪽으로 당겨 잡음) */
+  muzzleZOffset = 0;
+
   /** 마지막으로 받은 실제 피해 (감소 적용 후) */
   lastDamage = 0;
 
@@ -176,7 +179,8 @@ export class Player {
     const m = WEAPON_CONFIG.muzzleOffset;
     const s = Math.sin(this.aimYaw);
     const c = Math.cos(this.aimYaw);
-    outPos.set(this.position.x + m.x * c + m.z * s, m.y, this.position.z - m.x * s + m.z * c);
+    const mz = m.z + this.muzzleZOffset;
+    outPos.set(this.position.x + m.x * c + mz * s, m.y, this.position.z - m.x * s + mz * c);
     outDir.set(s, 0, c);
   }
 
