@@ -230,6 +230,11 @@ export const PROGRESSION_CONFIG = {
   collectDistance: 0.55,
   /** 동시에 존재할 수 있는 결정 수. 넘으면 가까운 결정과 병합 (경험치 손실 없음) */
   maxOrbs: 160,
+  /**
+   * 결정이 이 개수 이상 쌓였을 때만 근처 결정과 병합 (성능용).
+   * 그 전에는 처치할 때마다 항상 새 결정이 보인다.
+   */
+  mergeStartCount: 120,
   /** 새 결정이 이 거리 안의 결정과 합쳐짐 */
   mergeRadius: 1.2,
   /** 치명타 피해 배율 */

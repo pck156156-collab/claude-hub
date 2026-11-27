@@ -3,7 +3,8 @@ import { PROGRESSION_CONFIG } from '../config/GameConfig';
 
 /**
  * 경험치 결정 (풀 + InstancedMesh). 결정 수와 관계없이 드로우콜 2회 (결정 + 바닥 빛).
- * - 생성: 근처(mergeRadius)의 대기 중 결정이 있으면 값을 합친다. 상한을 넘으면 가장 가까운 결정에 합친다.
+ * - 생성: 평소에는 처치마다 항상 새 결정을 만든다. 결정이 mergeStartCount 이상 쌓였을 때만
+ *   근처(mergeRadius)의 대기 중 결정에 값을 합치고, 상한을 넘으면 가장 가까운 결정에 합친다.
  *   → 화면의 결정 수는 제한되지만 총 경험치는 줄지 않는다.
  * - 획득 범위 안에 들어오면 플레이어 쪽으로 가속하며 끌려가고, 도착하면 collect 호출.
  * - 화면 밖 결정도 그대로 남는다 (사라지지 않음). 로직은 고정 스텝에서만 움직이므로 일시정지 중에는 멈춘다.
@@ -80,8 +81,8 @@ export class ExperienceOrbs {
   }
 
   spawn(x: number, z: number, value: number): void {
-    // 1) 근처의 대기 중 결정과 병합
-    const r2 = PROGRESSION_CONFIG.mergeRadius ** 2;
+    // 1) 결정이 많이 쌓였을 때만 근처의 대기 중 결정과 병합
+    const r2 = this.count >= PROGRESSION_CONFIG.mergeStartCount ? PROGRESSION_CONFIG.mergeRadius ** 2 : -1;
     let nearest = -1;
     let nd = Infinity;
     for (let i = 0; i < this.capacity; i++) {
@@ -94,13 +95,14 @@ export class ExperienceOrbs {
         return;
       }
     }
-    // 2) 빈 슬롯
+    // 2) 빈 슬롯. 다른 결정과 겹쳐 하나처럼 보이지 않도록 살짝 떨어진 자리에 놓는다
+    const [sx, sz] = this.freeSpot(x, z);
     for (let i = 0; i < this.capacity; i++) {
       if (this.active[i]) continue;
       this.active[i] = 1;
       this.attracted[i] = 0;
-      this.x[i] = x;
-      this.z[i] = z;
+      this.x[i] = sx;
+      this.z[i] = sz;
       this.value[i] = value;
       this.speed[i] = 0;
       this.seed[i] = Math.random() * 10;
@@ -112,6 +114,28 @@ export class ExperienceOrbs {
       this.value[nearest] += value;
       this.merges++;
     }
+  }
+
+  /** (x, z) 근처에서 기존 결정과 0.45 이상 떨어진 자리 (못 찾으면 원래 자리) */
+  private freeSpot(x: number, z: number): [number, number] {
+    const min2 = 0.45 * 0.45;
+    const clear = (px: number, pz: number) => {
+      for (let i = 0; i < this.capacity; i++) {
+        if (this.active[i] && (this.x[i] - px) ** 2 + (this.z[i] - pz) ** 2 < min2) return false;
+      }
+      return true;
+    };
+    if (clear(x, z)) return [x, z];
+    const a0 = Math.random() * Math.PI * 2;
+    for (const r of [0.5, 0.8]) {
+      for (let k = 0; k < 8; k++) {
+        const a = a0 + (k / 8) * Math.PI * 2;
+        const px = x + Math.cos(a) * r;
+        const pz = z + Math.sin(a) * r;
+        if (clear(px, pz)) return [px, pz];
+      }
+    }
+    return [x, z];
   }
 
   /** 게임 로직 스텝 */
