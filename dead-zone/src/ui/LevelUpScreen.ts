@@ -79,7 +79,7 @@ export class LevelUpScreen {
   }
 
   /** 무기 보상 카드 */
-  showOffer(title: string, subtitle: string, offers: WeaponOffer[], equipped: string, remaining: number): void {
+  showOffer(title: string, subtitle: string, offers: WeaponOffer[], equipped: string, remaining: number, declinable = true): void {
     this.mode = 'offer';
     this.choices = [];
     this.titleEl.textContent = title;
@@ -87,7 +87,8 @@ export class LevelUpScreen {
     this.hintEl.hidden = true;
     this.equippedEl.hidden = false;
     this.equippedEl.innerHTML = equipped;
-    this.declineEl.hidden = false;
+    this.equippedEl.hidden = !equipped;
+    this.declineEl.hidden = !declinable;
     this.open(offers.map((o) => this.offerCard(o)));
   }
 
@@ -99,6 +100,12 @@ export class LevelUpScreen {
 
   /** 숫자 키 선택 (0부터) — 강화 카드에서만 */
   select(index: number): void {
+    // 무기 · 보스 보상: 버튼이 하나인 카드는 숫자 키로 바로 선택
+    if (this.mode === 'offer') {
+      const btns = this.cardsEl.children[index]?.querySelectorAll<HTMLButtonElement>('.actions button');
+      if (btns && btns.length === 1) btns[0].click();
+      return;
+    }
     if (this.mode !== 'upgrade' || !this.ready()) return;
     const choice = this.choices[index];
     if (!choice) return;

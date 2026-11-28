@@ -30,13 +30,19 @@ export class GameCamera {
   private readonly savedQuat = new THREE.Quaternion();
   private shaken = false;
 
+  /** 설정: 화면 흔들림 · 반동 세기 (0 = 끔, 1 = 기본) */
+  shakeScale = 1;
+
   /** 화면 흔들림 추가 (최대 0.5) */
   shake(amount: number): void {
+    amount *= this.shakeScale;
+    if (amount <= 0) return;
     this.shakeAmount = Math.min(0.5, Math.max(this.shakeAmount, amount));
   }
 
   /** 사격 반동 (dirX/dirZ = 조준 방향, amount = 밀리는 거리). 쿼터뷰라 아주 약하게, 누적 상한 0.15 */
   kick(dirX: number, dirZ: number, amount: number): void {
+    amount *= this.shakeScale;
     this.kickOffset.x -= dirX * amount;
     this.kickOffset.z -= dirZ * amount;
     const l = Math.hypot(this.kickOffset.x, this.kickOffset.z);

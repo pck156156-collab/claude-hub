@@ -58,44 +58,51 @@ export interface GunDef {
    * 궤적 길이 · 탄착 이펙트 크기 · 반동 복귀 속도(클수록 빨리 돌아옴)
    */
   fx: { flashTime: number; shake: number; tracerLength: number; impactScale: number; recoilRecover: number };
+  /**
+   * 연사 속도 강화가 이 총에 적용되는 비율 (8단계 밸런스). 이미 연사가 빠르고 탄창이 큰 LMG 는 낮게 →
+   * "기관총 + 속사" 조합이 강하되 수치가 폭증하지 않게
+   */
+  fireRateScaling: number;
+  /** 기본 관통 수 (강화 관통에 더해짐). 샷건 산탄 · LMG = 1 → 무리를 상대할 때 강함 */
+  basePierce: number;
 }
 
 export const GUNS: Record<GunId, GunDef> = {
   p9: {
-    id: 'p9', name: 'P9 권총', role: '높은 정확도 · 반자동 (클릭당 1발)',
-    damage: 35, pellets: 1, fireRate: 3, auto: false, magazineSize: 15, reloadTime: 1.2,
+    id: 'p9', name: 'P9 권총', role: '정확한 보조 무기 · 반자동 · 빠른 재장전',
+    damage: 35, pellets: 1, fireRate: 3, auto: false, magazineSize: 15, reloadTime: 1.0, fireRateScaling: 1, basePierce: 0,
     projectileSpeed: 70, range: 40, spreadDeg: 0.25, moveSpreadDeg: 0.6, pelletConeDeg: 0,
     falloffStart: 999, falloffEnd: 999, minFalloff: 1, knockback: 2.2, recoil: 0.05, flashScale: 0.7,
     tracerColor: 0xffe2a0, tracerWidth: 0.06, soundPitch: 1.35, soundBody: 0.45, rangeLabel: '중거리', holdZ: -0.45,
     fx: { flashTime: 0.045, shake: 0.035, tracerLength: 2.0, impactScale: 1, recoilRecover: 22 },
   },
   viper: {
-    id: 'viper', name: 'Viper SMG', role: '매우 빠른 연사 · 이동 사격에 유리',
-    damage: 15, pellets: 1, fireRate: 12, auto: true, magazineSize: 40, reloadTime: 1.6,
+    id: 'viper', name: 'Viper SMG', role: '근거리 고연사 · 이동 사격에 유리 · 멀수록 약함',
+    damage: 17, pellets: 1, fireRate: 12, auto: true, magazineSize: 40, reloadTime: 1.6, fireRateScaling: 0.8, basePierce: 0,
     projectileSpeed: 58, range: 32, spreadDeg: 3.2, moveSpreadDeg: 0.4, pelletConeDeg: 0,
-    falloffStart: 999, falloffEnd: 999, minFalloff: 1, knockback: 1.2, recoil: 0.04, flashScale: 0.65,
+    falloffStart: 12, falloffEnd: 28, minFalloff: 0.6, knockback: 1.2, recoil: 0.04, flashScale: 0.65,
     tracerColor: 0xfff0b0, tracerWidth: 0.05, soundPitch: 1.5, soundBody: 0.3, rangeLabel: '근 · 중거리', holdZ: -0.2,
     fx: { flashTime: 0.035, shake: 0.015, tracerLength: 1.5, impactScale: 0.7, recoilRecover: 28 },
   },
   ar12: {
     id: 'ar12', name: 'AR-12 돌격소총', role: '균형 잡힌 화력 · 중거리 전투',
-    damage: 25, pellets: 1, fireRate: 8, auto: true, magazineSize: 30, reloadTime: 1.8,
+    damage: 25, pellets: 1, fireRate: 8, auto: true, magazineSize: 30, reloadTime: 1.8, fireRateScaling: 1, basePierce: 0,
     projectileSpeed: 60, range: 45, spreadDeg: 0.8, moveSpreadDeg: 1.4, pelletConeDeg: 0,
     falloffStart: 999, falloffEnd: 999, minFalloff: 1, knockback: 2.6, recoil: 0.09, flashScale: 1,
     tracerColor: 0xffd28a, tracerWidth: 0.08, soundPitch: 1, soundBody: 0.7, rangeLabel: '중 · 원거리', holdZ: 0,
     fx: { flashTime: 0.05, shake: 0.03, tracerLength: 2.4, impactScale: 1, recoilRecover: 18 },
   },
   bulldog: {
-    id: 'bulldog', name: 'Bulldog 샷건', role: '산탄 8발 · 근거리 고화력 · 멀수록 약함',
-    damage: 12, pellets: 8, fireRate: 1.2, auto: true, magazineSize: 8, reloadTime: 2.4,
+    id: 'bulldog', name: 'Bulldog 샷건', role: '산탄 8발 · 2마리 관통 · 근거리 무리 처리',
+    damage: 16, pellets: 8, fireRate: 1.5, auto: true, magazineSize: 8, reloadTime: 2.2, fireRateScaling: 1, basePierce: 2,
     projectileSpeed: 55, range: 17, spreadDeg: 1, moveSpreadDeg: 1, pelletConeDeg: 26,
     falloffStart: 5, falloffEnd: 16, minFalloff: 0.4, knockback: 1.6, recoil: 0.17, flashScale: 1.6,
     tracerColor: 0xffb070, tracerWidth: 0.05, soundPitch: 0.7, soundBody: 1.1, rangeLabel: '근거리', holdZ: -0.04,
     fx: { flashTime: 0.08, shake: 0.11, tracerLength: 1.2, impactScale: 0.55, recoilRecover: 9 },
   },
   titan: {
-    id: 'titan', name: 'Titan LMG', role: '탄창 100발 · 지속 화력 · 긴 재장전',
-    damage: 20, pellets: 1, fireRate: 10, auto: true, magazineSize: 100, reloadTime: 4.0,
+    id: 'titan', name: 'Titan LMG', role: '탄창 100발 · 1마리 관통 · 무리 상대 지속 화력',
+    damage: 15, pellets: 1, fireRate: 10, auto: true, magazineSize: 100, reloadTime: 4.0, fireRateScaling: 0.5, basePierce: 1,
     projectileSpeed: 65, range: 45, spreadDeg: 2.8, moveSpreadDeg: 2.6, pelletConeDeg: 0,
     falloffStart: 999, falloffEnd: 999, minFalloff: 1, knockback: 2.4, recoil: 0.12, flashScale: 1.25,
     tracerColor: 0xffa860, tracerWidth: 0.09, soundPitch: 0.85, soundBody: 0.9, rangeLabel: '중 · 원거리', holdZ: 0,
@@ -146,7 +153,7 @@ export const MELEE: Record<MeleeId, MeleeDef> = {
   },
   axe: {
     id: 'axe', name: 'Fire Axe', role: '느리지만 강력한 내려치기',
-    damage: 70, interval: 1.1, range: 1.9, arcDeg: 95, maxTargets: 2, knockback: 4.5,
+    damage: 85, interval: 1.1, range: 1.9, arcDeg: 95, maxTargets: 2, knockback: 4.5,
     style: 'chop', duration: 0.62, hitTime: 0.33, trailColor: 0xffb0a0,
   },
 };

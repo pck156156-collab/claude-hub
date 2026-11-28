@@ -1,4 +1,4 @@
-import { QUALITY_PRESETS, QualityLevel, WAVE_CONFIG } from '../config/GameConfig';
+import { DIFFICULTIES, DifficultyId, QUALITY_PRESETS, QualityLevel, WAVE_CONFIG } from '../config/GameConfig';
 import { RecordResult, RecordSet } from '../core/Records';
 import { formatTime } from '../waves/WaveSystem';
 
@@ -81,6 +81,11 @@ export class GameUI {
   private readonly qualityButtons: HTMLButtonElement[] = [];
   onResume: (() => void) | null = null;
   onRestart: (() => void) | null = null;
+  /** 난이도 · 화면 흔들림 · 데미지 숫자 설정 */
+  onDifficulty: ((id: DifficultyId) => void) | null = null;
+  onShake: ((v: number) => void) | null = null;
+  onDamageNumbers: ((on: boolean) => void) | null = null;
+  private readonly difficultyButtons: HTMLButtonElement[] = [];
   /** 소리 설정 변경 (슬라이더 · 음소거) */
   onVolume: ((kind: 'master' | 'sfx' | 'music', value: number) => void) | null = null;
   onMute: ((muted: boolean) => void) | null = null;
@@ -94,6 +99,23 @@ export class GameUI {
       el.addEventListener('keydown', (e) => e.stopPropagation());
     }
     for (const el of document.querySelectorAll<HTMLInputElement>('[data-mute]')) el.addEventListener('change', () => this.onMute?.(el.checked));
+    for (const el of document.querySelectorAll<HTMLInputElement>('[data-shake]')) {
+      el.addEventListener('input', () => this.onShake?.(Number(el.value) / 100));
+      el.addEventListener('keydown', (e) => e.stopPropagation());
+    }
+    for (const el of document.querySelectorAll<HTMLInputElement>('[data-dmgnum]')) el.addEventListener('change', () => this.onDamageNumbers?.(el.checked));
+    for (const group of document.querySelectorAll('.difficulty-group')) {
+      for (const [id, d] of Object.entries(DIFFICULTIES)) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'q-btn';
+        b.dataset.difficulty = id;
+        b.textContent = d.label;
+        b.addEventListener('click', () => this.onDifficulty?.(id as DifficultyId));
+        group.appendChild(b);
+        this.difficultyButtons.push(b);
+      }
+    }
     for (const group of document.querySelectorAll('.quality-group')) {
       for (const [level, preset] of Object.entries(QUALITY_PRESETS)) {
         const b = document.createElement('button');
@@ -106,6 +128,24 @@ export class GameUI {
         this.qualityButtons.push(b);
       }
     }
+  }
+
+  /** 생존 목표 패널 (초 단위로만 DOM 갱신) */
+  setObjective(o: { next: string; boss: string; goal: string; best: string; difficulty: string }): void {
+    this.set('objective', `${o.next}|${o.boss}|${o.goal}|${o.best}|${o.difficulty}`, () => {
+      $('obj-next').textContent = o.next;
+      $('obj-boss').textContent = o.boss;
+      $('obj-goal').textContent = o.goal;
+      $('obj-best').textContent = `${o.best} · ${o.difficulty}`;
+    });
+  }
+
+  /** 난이도 버튼 · 설명 · 흔들림 · 데미지 숫자 표시 동기화 */
+  setGameSettings(st: { difficulty: DifficultyId; shake: number; damageNumbers: boolean }): void {
+    for (const b of this.difficultyButtons) b.setAttribute('aria-pressed', String(b.dataset.difficulty === st.difficulty));
+    for (const el of document.querySelectorAll<HTMLElement>('[data-diffnote]')) el.textContent = DIFFICULTIES[st.difficulty].desc + (st.difficulty !== 'normal' ? ' · 최고 기록은 난이도별로 따로 저장' : '');
+    for (const el of document.querySelectorAll<HTMLInputElement>('[data-shake]')) el.value = String(Math.round(st.shake * 100));
+    for (const el of document.querySelectorAll<HTMLInputElement>('[data-dmgnum]')) el.checked = st.damageNumbers;
   }
 
   /** 소리 설정 화면 값 동기화 (시작 · 일시정지 화면 양쪽) */

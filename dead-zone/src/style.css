@@ -444,3 +444,28 @@ h2 { margin: 8px 0 12px; font-size: clamp(22px, 4.6vw, 30px); letter-spacing: 0.
 .playing .hud-bl { opacity: 0.45; transition: opacity 1.5s 6s; }
 .hud .stat, .hud .wave-box, .hud .health, .hud .slot, .hud .controls, .boss-bar { backdrop-filter: blur(2px); }
 .toast { z-index: 4; }
+
+/* ── 8단계: 생존 목표 · 위험 표시 · 설정 */
+.objective { display: inline-flex; flex-wrap: wrap; justify-content: center; gap: 2px 12px; margin-top: 4px; max-width: 380px; padding: 3px 10px; background: rgba(16, 17, 18, 0.6); border-radius: 4px; font-size: 11px; color: var(--ink-dim); text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9); }
+.objective b { color: var(--ink); font-variant-numeric: tabular-nums; font-weight: 700; }
+.objective em { flex-basis: 100%; font-style: normal; color: var(--gold); opacity: 0.85; }
+.hud-boss { top: 112px; }
+
+
+/* 화면 밖 위협 방향 화살표 */
+.threat-layer { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
+.threat { position: absolute; left: 0; top: 0; width: 0; height: 0; border-top: 9px solid transparent; border-bottom: 9px solid transparent; border-left: 16px solid #ff3a2a; filter: drop-shadow(0 0 4px rgba(0, 0, 0, 0.9)); }
+.threat.boss { border-left-color: #ff2a2a; border-top-width: 12px; border-bottom-width: 12px; border-left-width: 22px; animation: threatpulse 0.8s ease-in-out infinite; }
+.threat.elite { border-left-color: var(--gold); }
+.threat.prime { border-left-color: #ff8a2a; animation: threatpulse 0.3s ease-in-out infinite; }
+@keyframes threatpulse { 50% { opacity: 0.45; } }
+
+.game-settings { display: flex; gap: 14px; align-items: end; margin: 4px 0; font-size: 12px; color: var(--ink-dim); }
+.game-settings label { display: flex; flex-direction: column; gap: 3px; text-align: left; }
+.game-settings label.mute { flex-direction: row; align-items: center; gap: 5px; }
+.game-settings input[type='range'] { width: 140px; accent-color: var(--accent); }
+.difficulty-group { display: inline-flex; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+.difficulty-group .q-btn[aria-pressed='true'] { background: #5a6b2a; }
+.difficulty-group .q-btn[data-difficulty='hard'][aria-pressed='true'] { background: var(--accent); }
+.difficulty-group .q-btn[data-difficulty='easy'][aria-pressed='true'] { background: #2a6b4a; }
+.difficulty-note { margin: 2px 0 6px; font-size: 12px; color: var(--ink-dim); min-height: 16px; }

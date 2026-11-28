@@ -168,11 +168,15 @@ export function scaleForWave(base: ZombieStats, healthMul: number, speedMul: num
  */
 export const SPAWN_TABLE: Record<Exclude<EnemyKind, 'boss'>, { unlock: number; weight: { base: number; perWave: number; max: number }; cap: { base: number; perWave: number; max: number } }> = {
   walker: { unlock: 1, weight: { base: 1, perWave: 0, max: 1 }, cap: { base: 999, perWave: 0, max: 999 } },
-  runner: { unlock: 2, weight: { base: 0.22, perWave: 0.03, max: 0.42 }, cap: { base: 3, perWave: 0.5, max: 8 } },
-  spitter: { unlock: 3, weight: { base: 0.14, perWave: 0.015, max: 0.26 }, cap: { base: 2, perWave: 0.34, max: 5 } },
-  tank: { unlock: 4, weight: { base: 0.07, perWave: 0.01, max: 0.14 }, cap: { base: 1, perWave: 0.25, max: 3 } },
+  // 러너: 도망칠 수 없을 만큼 몰리지 않도록 상한 6
+  runner: { unlock: 2, weight: { base: 0.2, perWave: 0.025, max: 0.38 }, cap: { base: 2, perWave: 0.4, max: 6 } },
+  spitter: { unlock: 3, weight: { base: 0.13, perWave: 0.015, max: 0.26 }, cap: { base: 2, perWave: 0.3, max: 5 } },
+  tank: { unlock: 4, weight: { base: 0.07, perWave: 0.01, max: 0.15 }, cap: { base: 1, perWave: 0.2, max: 3 } },
   exploder: { unlock: 6, weight: { base: 0.1, perWave: 0.015, max: 0.2 }, cap: { base: 2, perWave: 0.25, max: 4 } },
 };
+
+/** 종류별 최소 생성 거리 추가 (폭발 좀비가 가까이에서 생기지 않도록) */
+export const SPAWN_EXTRA_DISTANCE: Partial<Record<EnemyKind, number>> = { exploder: 5, tank: 2 };
 
 export function spawnWeight(kind: Exclude<EnemyKind, 'boss'>, wave: number): number {
   const r = SPAWN_TABLE[kind];
@@ -247,3 +251,20 @@ export interface BossReward {
 }
 
 export const BOSS_REWARD: Omit<BossReward, 'xp'> = { heal: 30, items: [] };
+
+/** 보스 처치 후 선택 보상 (기존 보상 — 경험치 300 · 체력 30 — 에 더해 하나 선택) */
+export const BOSS_CHOICES = {
+  /** 응급 수혈: 체력 회복량 */
+  heal: 50,
+  /** 전투 경험: 장착 총기 2종 각각 · 근접 무기 숙련도 경험치 */
+  gunMastery: 1200,
+  meleeMastery: 500,
+};
+
+/** 엘리트 처치 추가 보상 (경험치 5배는 그대로). 짧은 시간에 반복해서 받지 않도록 쿨다운 */
+export const ELITE_REWARD = {
+  heal: 10,
+  /** 장착 총기 2종 탄창을 가득 채움 (재장전 중이 아닌 총만) */
+  refillAmmo: true,
+  cooldown: 15,
+};

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { EnemyKind, NAV_CONFIG, SPAWN_CONFIG, WaveParams, ZOMBIE_TYPES, ZombieStats, waveParams } from '../config/GameConfig';
-import { BOSS_CONFIG, ELITE_CONFIG, ENEMY_TYPES, SPAWN_TABLE, bossStats, eliteChance, makeElite, scaleForWave, spawnCap, spawnWeight } from './EnemyData';
+import { DIFFICULTIES, DifficultyDef, EnemyKind, NAV_CONFIG, SPAWN_CONFIG, WaveParams, ZOMBIE_TYPES, ZombieStats, waveParams } from '../config/GameConfig';
+import { BOSS_CONFIG, ELITE_CONFIG, ENEMY_TYPES, SPAWN_EXTRA_DISTANCE, SPAWN_TABLE, bossStats, eliteChance, makeElite, scaleForWave, spawnCap, spawnWeight } from './EnemyData';
 import { ENEMY_BEHAVIORS } from './EnemyBehaviors';
 import { DamageableRegistry } from '../combat/Damageable';
 import { CollisionWorld } from '../world/Collision';
@@ -15,6 +15,8 @@ const NO_EVENTS: EnemyEvents = { canSpit: () => true, spit: () => {}, emit: () =
 
 /** 이 거리보다 먼 좀비는 AI 를 절반 빈도(60Hz)로 갱신 (화면 밖이라 차이가 보이지 않음) */
 const FAR_AI_DISTANCE = 30;
+/** 분리 격자 칸 크기: 가장 큰 쌍(보스 1.25 + 탱커 엘리트 0.8)의 반경 합보다 크게 */
+const SEPARATION_CELL = 2.6;
 
 /**
  * 좀비 집단 관리: 웨이브 난이도에 따른 생성, AI 갱신, 좀비끼리 겹침 방지, 시체 정리, 객체 풀.
@@ -129,11 +131,30 @@ export class ZombieManager {
   setDifficulty(params: WaveParams): void {
     this.difficulty = params;
     const base = ZOMBIE_TYPES.walker;
-    this.scaledStats = scaleForWave(base, params.healthMultiplier, params.speedMultiplier);
+    this.scaledStats = this.withMode(scaleForWave(base, params.healthMultiplier, params.speedMultiplier));
     this.scaledKinds.walker = this.scaledStats;
-    for (const k of SPAWN_KINDS) if (k !== 'walker') this.scaledKinds[k] = scaleForWave(ENEMY_TYPES[k], params.healthMultiplier, params.speedMultiplier);
+    for (const k of SPAWN_KINDS) if (k !== 'walker') this.scaledKinds[k] = this.withMode(scaleForWave(ENEMY_TYPES[k], params.healthMultiplier, params.speedMultiplier));
     // 첫 생성 대기 중이 아니면, 남은 대기 시간이 새 간격보다 길지 않게
     if (this.spawned > 0 && this.spawnTimer > params.spawnInterval) this.spawnTimer = params.spawnInterval;
+  }
+
+  /** 난이도 (적 피해 · 생성량 · 특수 비율). 판 시작 때 정하고 판 중에는 바꾸지 않는다 */
+  mode: DifficultyDef = DIFFICULTIES.normal;
+
+  setMode(def: DifficultyDef): void {
+    this.mode = def;
+    this.setDifficulty(this.difficulty);
+  }
+
+  /** 난이도 피해 배율 적용 (근접 · 원거리 · 폭발) */
+  private withMode(st: ZombieStats): ZombieStats {
+    const k = this.mode.enemyDamage;
+    if (k === 1) return st;
+    return {
+      ...st,
+      attackDamage: +(st.attackDamage * k).toFixed(2),
+      explode: st.explode ? { ...st.explode, damage: +(st.explode.damage * k).toFixed(2) } : undefined,
+    };
   }
 
   /** 현재 웨이브 기준 좀비 능력치 */
@@ -143,17 +164,19 @@ export class ZombieManager {
 
   /** 현재 웨이브 기준 종류별 능력치 (엘리트 변형 선택) */
   statsFor(kind: SpawnKind, elite = false): ZombieStats {
-    const base = this.scaledKinds[kind] ?? scaleForWave(ENEMY_TYPES[kind], this.difficulty.healthMultiplier, this.difficulty.speedMultiplier);
+    const base = this.scaledKinds[kind] ?? this.withMode(scaleForWave(ENEMY_TYPES[kind], this.difficulty.healthMultiplier, this.difficulty.speedMultiplier));
     return elite ? makeElite(base) : base;
   }
 
   /** 보스가 살아 있으면 일반 좀비 수 · 생성 간격 조정 */
   get effectiveMaxAlive(): number {
-    return this.boss ? Math.max(4, Math.floor(this.difficulty.maxAlive * BOSS_CONFIG.aliveMaxMul)) : this.difficulty.maxAlive;
+    const base = Math.round(this.difficulty.maxAlive * this.mode.maxAlive);
+    return this.boss ? Math.max(4, Math.floor(base * BOSS_CONFIG.aliveMaxMul)) : base;
   }
 
   get effectiveInterval(): number {
-    return this.boss ? this.difficulty.spawnInterval * BOSS_CONFIG.intervalMul : this.difficulty.spawnInterval;
+    const base = this.difficulty.spawnInterval * this.mode.spawnInterval;
+    return this.boss ? base * BOSS_CONFIG.intervalMul : base;
   }
 
   /**
@@ -165,7 +188,7 @@ export class ZombieManager {
     let total = 0;
     const weights: number[] = [];
     for (const k of SPAWN_KINDS) {
-      let w = spawnWeight(k, wave);
+      let w = spawnWeight(k, wave) * (k === 'walker' ? 1 : this.mode.specialWeight);
       if (w > 0 && k !== 'walker' && this.aliveOf(k) >= spawnCap(k, wave)) w = 0;
       weights.push(w);
       total += w;
@@ -177,7 +200,7 @@ export class ZombieManager {
       if (r <= 0 && weights[i] > 0) { kind = SPAWN_KINDS[i]; break; }
     }
     const maxElite = wave >= ELITE_CONFIG.lateWave ? ELITE_CONFIG.maxAliveLate : ELITE_CONFIG.maxAlive;
-    const elite = ELITE_CONFIG.kinds.includes(kind) && this.eliteAlive < maxElite && this.random() < eliteChance(wave);
+    const elite = ELITE_CONFIG.kinds.includes(kind) && this.eliteAlive < maxElite && this.random() < eliteChance(wave) * this.mode.eliteChance;
     return this.statsFor(kind, elite);
   }
 
@@ -193,7 +216,7 @@ export class ZombieManager {
    */
   spawnBoss(index: number, camera: THREE.Camera): Zombie | null {
     if (this.boss) return null;
-    const stats = bossStats(index);
+    const stats = this.withMode(bossStats(index));
     const c = BOSS_CONFIG;
     const p = this.ctx.target.position;
     let best: [number, number] | null = null;
@@ -311,7 +334,8 @@ export class ZombieManager {
     let found = 0;
     for (let attempt = 0; attempt < 60 && found < 8; attempt++) {
       const a = this.random() * Math.PI * 2;
-      const d = c.minDistance + this.random() * (c.maxDistance - c.minDistance);
+      const minD = c.minDistance + (SPAWN_EXTRA_DISTANCE[stats.kind] ?? 0);
+      const d = minD + this.random() * (c.maxDistance - minD);
       const dx = Math.sin(a);
       const dz = Math.cos(a);
       const x = p.x + dx * d;
@@ -369,34 +393,66 @@ export class ZombieManager {
     return false;
   }
 
-  /** 좀비끼리 · 좀비와 플레이어가 겹치지 않도록 밀어냄 (플레이어는 밀리지 않음 → 조작감 유지) */
+  /** 분리 처리용 격자 (칸 크기 = 가장 큰 두 몸 반경 합 이상 → 주변 3×3 칸만 검사) */
+  private readonly grid = new Map<number, Zombie[]>();
+  private readonly gridPool: Zombie[][] = [];
+  /** 마지막 분리 처리에서 검사한 쌍 수 (디버그 · 테스트) */
+  separationPairs = 0;
+
+  private gridKey(cx: number, cz: number): number {
+    return (cx + 512) * 1024 + (cz + 512);
+  }
+
+  /**
+   * 좀비끼리 · 좀비와 플레이어가 겹치지 않도록 밀어냄 (플레이어는 밀리지 않음 → 조작감 유지).
+   * 8단계: 모든 쌍(n²) 대신 격자 이웃만 검사. 결과(밀어내는 양)는 이전과 같다.
+   */
   private separate(): void {
     const list = this.zombies;
     const target = this.ctx.target;
+    const cell = SEPARATION_CELL;
+    this.separationPairs = 0;
     for (let iter = 0; iter < 2; iter++) {
-      for (let i = 0; i < list.length; i++) {
-        const a = list[i];
+      // 격자 채우기
+      for (const arr of this.grid.values()) { arr.length = 0; this.gridPool.push(arr); }
+      this.grid.clear();
+      for (const z of list) {
+        if (!z.alive) continue;
+        const key = this.gridKey(Math.floor(z.position.x / cell), Math.floor(z.position.z / cell));
+        let arr = this.grid.get(key);
+        if (!arr) { arr = this.gridPool.pop() ?? []; this.grid.set(key, arr); }
+        arr.push(z);
+      }
+      for (const a of list) {
         if (!a.alive) continue;
-        for (let j = i + 1; j < list.length; j++) {
-          const b = list[j];
-          if (!b.alive) continue;
-          const dx = b.position.x - a.position.x;
-          const dz = b.position.z - a.position.z;
-          const min = a.radius + b.radius;
-          const d2 = dx * dx + dz * dz;
-          if (d2 >= min * min) continue;
-          const d = Math.sqrt(d2) || 1e-4;
-          const nx = d2 > 1e-8 ? dx / d : Math.cos(a.id);
-          const nz = d2 > 1e-8 ? dz / d : Math.sin(a.id);
-          const pen = (min - d) * 0.5;
-          // 공격 중인 좀비 · 무거운 좀비(탱커 · 보스)는 덜 밀림
-          const wa = (a.state === ZombieState.Attack || a.state === ZombieState.Special ? 0.3 : 1) / a.stats.mass;
-          const wb = (b.state === ZombieState.Attack || b.state === ZombieState.Special ? 0.3 : 1) / b.stats.mass;
-          const sum = wa + wb;
-          a.position.x -= nx * pen * 2 * (wa / sum);
-          a.position.z -= nz * pen * 2 * (wa / sum);
-          b.position.x += nx * pen * 2 * (wb / sum);
-          b.position.z += nz * pen * 2 * (wb / sum);
+        const cx = Math.floor(a.position.x / cell);
+        const cz = Math.floor(a.position.z / cell);
+        for (let ox = -1; ox <= 1; ox++) {
+          for (let oz = -1; oz <= 1; oz++) {
+            const arr = this.grid.get(this.gridKey(cx + ox, cz + oz));
+            if (!arr) continue;
+            for (const b of arr) {
+              if (b.id <= a.id) continue; // 쌍마다 한 번
+              this.separationPairs++;
+              const dx = b.position.x - a.position.x;
+              const dz = b.position.z - a.position.z;
+              const min = a.radius + b.radius;
+              const d2 = dx * dx + dz * dz;
+              if (d2 >= min * min) continue;
+              const d = Math.sqrt(d2) || 1e-4;
+              const nx = d2 > 1e-8 ? dx / d : Math.cos(a.id);
+              const nz = d2 > 1e-8 ? dz / d : Math.sin(a.id);
+              const pen = (min - d) * 0.5;
+              // 공격 중인 좀비 · 무거운 좀비(탱커 · 보스)는 덜 밀림
+              const wa = (a.state === ZombieState.Attack || a.state === ZombieState.Special ? 0.3 : 1) / a.stats.mass;
+              const wb = (b.state === ZombieState.Attack || b.state === ZombieState.Special ? 0.3 : 1) / b.stats.mass;
+              const sum = wa + wb;
+              a.position.x -= nx * pen * 2 * (wa / sum);
+              a.position.z -= nz * pen * 2 * (wa / sum);
+              b.position.x += nx * pen * 2 * (wb / sum);
+              b.position.z += nz * pen * 2 * (wb / sum);
+            }
+          }
         }
         // 플레이어와 겹침
         const dx = a.position.x - target.position.x;

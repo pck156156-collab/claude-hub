@@ -69,7 +69,7 @@ export const UPGRADES: UpgradeDef[] = [
     rarity: 'common', maxLevel: 5, effect: 'reloadTimePct', value: 0.12, format: (l) => `재장전 시간 -${pct(0.12 * l)}`,
   },
   {
-    id: 'piercing', name: '관통 탄환', description: '총알이 좀비를 추가로 관통합니다.', icon: '⇶', category: 'attack',
+    id: 'piercing', name: '관통 탄환', description: '총알이 좀비를 추가로 관통합니다. 관통할 때마다 피해 -30%.', icon: '⇶', category: 'attack',
     rarity: 'epic', maxLevel: 3, effect: 'pierce', value: 1, format: (l) => `관통 +${l}마리`,
   },
   {
@@ -94,7 +94,7 @@ export const UPGRADES: UpgradeDef[] = [
     rarity: 'common', maxLevel: 5, effect: 'meleeKnockbackPct', value: 0.2, format: (l) => `근접 넉백 +${pct(0.2 * l)}`,
   },
   {
-    id: 'melee-leech', name: '흡혈 타격', description: '근접 공격으로 좀비를 처치하면 체력을 회복합니다.', icon: '♰', category: 'melee',
+    id: 'melee-leech', name: '흡혈 타격', description: '근접 공격으로 좀비를 처치하면 체력을 회복합니다 (초당 최대 12).', icon: '♰', category: 'melee',
     rarity: 'rare', maxLevel: 3, effect: 'meleeLifesteal', value: 5, format: (l) => `근접 처치 시 체력 +${5 * l}`,
   },
   // ── 생존
@@ -115,7 +115,9 @@ export const UPGRADES: UpgradeDef[] = [
   },
   {
     id: 'armor', name: '방탄 장비', description: '받는 피해가 줄어듭니다.', icon: '◈', category: 'survival',
-    rarity: 'rare', maxLevel: 5, effect: 'damageReduction', value: 0.08, format: (l) => `받는 피해 -${pct(0.08 * l)}`,
+    rarity: 'rare', maxLevel: 5, effect: 'damageReduction', value: 0.08,
+    // 곱셈 누적: 1 - 0.92^레벨 (5레벨 34%) → 신속 + 방탄 조합이 무적에 가까워지지 않게
+    format: (l) => `받는 피해 -${pct(1 - Math.pow(0.92, l))}`,
   },
   // ── 유틸리티
   {

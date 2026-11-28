@@ -19,9 +19,18 @@ export class Records {
   /** 저장소를 쓸 수 없는 환경이면 false (이번 세션 동안만 기억) */
   persistent = true;
 
-  constructor() {
+  /** 난이도별 기록 (보통 = 기존 저장 키 그대로) */
+  private key = KEY;
+
+  constructor(mode = 'normal') {
+    this.setMode(mode);
+  }
+
+  setMode(mode: string): void {
+    this.key = mode === 'normal' ? KEY : `${KEY}.${mode}`;
+    this.best = { time: 0, wave: 0, kills: 0 };
     try {
-      const raw = localStorage.getItem(KEY);
+      const raw = localStorage.getItem(this.key);
       if (raw) {
         const v = JSON.parse(raw) as Partial<RecordSet>;
         this.best = { time: num(v.time), wave: num(v.wave), kills: num(v.kills) };
@@ -46,7 +55,7 @@ export class Records {
     };
     r.best = this.best;
     try {
-      localStorage.setItem(KEY, JSON.stringify(this.best));
+      localStorage.setItem(this.key, JSON.stringify(this.best));
     } catch {
       this.persistent = false;
     }

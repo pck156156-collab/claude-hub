@@ -254,17 +254,21 @@ export interface WaveParams {
  */
 export const WAVE_CONFIG = {
   duration: 60,
+  /**
+   * 8단계 곡선: 체력보다 수 · 구성으로 난이도를 올린다.
+   * 0~2분 적응(적은 수), 2~5분 밀도 증가, 5~10분 특수 · 엘리트 · 보스, 10분 이후 높은 밀도 + 완만한 체력 증가
+   */
   table: [
-    { spawnInterval: 2.0, maxAlive: 15, healthMultiplier: 1.0, speedMultiplier: 1.0 },
-    { spawnInterval: 1.7, maxAlive: 20, healthMultiplier: 1.15, speedMultiplier: 1.0 },
-    { spawnInterval: 1.4, maxAlive: 25, healthMultiplier: 1.3, speedMultiplier: 1.03 },
-    { spawnInterval: 1.1, maxAlive: 30, healthMultiplier: 1.45, speedMultiplier: 1.06 },
-    { spawnInterval: 0.9, maxAlive: 35, healthMultiplier: 1.6, speedMultiplier: 1.1 },
+    { spawnInterval: 2.2, maxAlive: 12, healthMultiplier: 1.0, speedMultiplier: 1.0 },
+    { spawnInterval: 1.8, maxAlive: 16, healthMultiplier: 1.05, speedMultiplier: 1.0 },
+    { spawnInterval: 1.45, maxAlive: 22, healthMultiplier: 1.12, speedMultiplier: 1.02 },
+    { spawnInterval: 1.15, maxAlive: 28, healthMultiplier: 1.2, speedMultiplier: 1.04 },
+    { spawnInterval: 0.95, maxAlive: 32, healthMultiplier: 1.28, speedMultiplier: 1.06 },
   ],
-  /** 6웨이브 이후: 웨이브마다 생성 간격 ×0.95, 상한 +2, 체력 +0.08, 속도 +0.02 */
-  after: { intervalFactor: 0.95, maxAliveStep: 2, healthStep: 0.08, speedStep: 0.02 },
+  /** 6웨이브 이후: 웨이브마다 생성 간격 ×0.94, 상한 +2.5, 체력 +0.06, 속도 +0.015 */
+  after: { intervalFactor: 0.94, maxAliveStep: 2.5, healthStep: 0.06, speedStep: 0.015 },
   /** 상한 (플레이 불가능해지지 않도록) */
-  limits: { minInterval: 0.55, maxAlive: 50, maxHealthMultiplier: 2.6, maxSpeedMultiplier: 1.25 },
+  limits: { minInterval: 0.45, maxAlive: 58, maxHealthMultiplier: 2.2, maxSpeedMultiplier: 1.2 },
   /** 웨이브 알림 표시 시간 (초) */
   bannerTime: 2.6,
 };
@@ -281,19 +285,44 @@ export function waveParams(wave: number): WaveParams {
   return {
     wave: w,
     spawnInterval: Math.max(l.minInterval, +(last.spawnInterval * Math.pow(a.intervalFactor, n)).toFixed(3)),
-    maxAlive: Math.min(l.maxAlive, last.maxAlive + a.maxAliveStep * n),
+    maxAlive: Math.min(l.maxAlive, Math.round(last.maxAlive + a.maxAliveStep * n)),
     healthMultiplier: Math.min(l.maxHealthMultiplier, +(last.healthMultiplier + a.healthStep * n).toFixed(2)),
     speedMultiplier: Math.min(l.maxSpeedMultiplier, +(last.speedMultiplier + a.speedStep * n).toFixed(2)),
   };
 }
 
+/** 난이도 (시작 화면에서 선택). 적 능력치 · 생성에만 영향 → 플레이어 무기 · 조작감은 같다 */
+export type DifficultyId = 'easy' | 'normal' | 'hard';
+export interface DifficultyDef {
+  label: string;
+  desc: string;
+  /** 적 공격 피해 배율 (근접 · 독 · 폭발 · 보스) */
+  enemyDamage: number;
+  /** 생성 간격 배율 (클수록 느리게) */
+  spawnInterval: number;
+  /** 동시 생존 상한 배율 */
+  maxAlive: number;
+  /** 특수 좀비 등장 가중치 배율 */
+  specialWeight: number;
+  /** 엘리트 확률 배율 */
+  eliteChance: number;
+}
+export const DIFFICULTIES: Record<DifficultyId, DifficultyDef> = {
+  easy: { label: '쉬움', desc: '좀비 피해 -35% · 생성량 감소 · 특수 좀비 적음', enemyDamage: 0.65, spawnInterval: 1.25, maxAlive: 0.8, specialWeight: 0.7, eliteChance: 0.6 },
+  normal: { label: '보통', desc: '기본 밸런스', enemyDamage: 1, spawnInterval: 1, maxAlive: 1, specialWeight: 1, eliteChance: 1 },
+  hard: { label: '어려움', desc: '좀비 피해 +30% · 특수 좀비 증가 · 생성 간격 -12%', enemyDamage: 1.3, spawnInterval: 0.88, maxAlive: 1.1, specialWeight: 1.4, eliteChance: 1.4 },
+};
+
 /** 경험치 · 레벨 · 강화 */
 export const PROGRESSION_CONFIG = {
   /** 레벨 n → n+1 필요 경험치 (레벨 1~5) */
   xpTable: [30, 45, 65, 90, 120],
-  /** 레벨 6 이후: 120 + 40·k + 4·k² (k = 레벨 - 5) → 164, 216, 276, 344, 420 ... */
-  xpLinear: 40,
-  xpQuadratic: 4,
+  /**
+   * 레벨 6 이후: 120 + 45·k + 6·k² (k = 레벨 - 5) → 171, 234, 309, 396, 495 ...
+   * 8단계: 중후반 레벨업 간격이 25초 안팎으로 잦아 전투 흐름이 끊겨 조금 완만하게 (봇 시뮬레이션 기준)
+   */
+  xpLinear: 45,
+  xpQuadratic: 6,
   /** 기본 경험치 획득 범위 (플레이어 중심 반경) */
   pickupRadius: 2.5,
   /** 결정이 끌려오는 최고 속도 (단위/초) */

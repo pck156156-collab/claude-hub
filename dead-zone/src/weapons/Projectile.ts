@@ -4,6 +4,9 @@ import { Damageable, DamageableRegistry } from '../combat/Damageable';
 import { CollisionWorld, RayHit } from '../world/Collision';
 
 /** 탄 1발 발사 정보 (GunShooter 가 산탄마다 하나씩 만든다) */
+/** 관통 후 남는 피해 비율 (8단계 밸런스) */
+export const PIERCE_DAMAGE_KEEP = 0.7;
+
 export interface BulletSpec {
   origin: THREE.Vector3;
   direction: THREE.Vector3;
@@ -237,6 +240,8 @@ export class ProjectileSystem {
           p.traveled += move * t;
           this.fillImpact(p, e);
           this.onImpact?.(e);
+          // 관통할 때마다 다음 대상 피해 감소 (관통 + 고연사 조합의 수치 폭증 방지)
+          p.damage *= PIERCE_DAMAGE_KEEP;
           p.traveled -= move * t;
           p.pos.copy(e.point);
           p.traveled += move * t;

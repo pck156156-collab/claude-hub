@@ -1,6 +1,6 @@
 import { LOADOUT } from '../weapons/WeaponData';
 
-export type RewardKind = 'upgrade' | 'gun' | 'melee';
+export type RewardKind = 'upgrade' | 'gun' | 'melee' | 'boss';
 
 export interface Reward {
   kind: RewardKind;
@@ -8,7 +8,8 @@ export interface Reward {
   level: number;
 }
 
-const ORDER: Record<RewardKind, number> = { upgrade: 0, gun: 1, melee: 2 };
+/** 보스 보상은 가장 먼저 (처치 직후 선택) */
+const ORDER: Record<RewardKind, number> = { boss: -1, upgrade: 0, gun: 1, melee: 2 };
 
 /**
  * 보상 대기열: 레벨업 강화 · 총기 보상 · 근접 무기 보상을 하나의 줄로 관리한다.
@@ -36,6 +37,25 @@ export class RewardQueue {
     if (LOADOUT.gunRewardLevels.includes(level)) this.items.push({ kind: 'gun', level });
     if (LOADOUT.meleeRewardLevels.includes(level)) this.items.push({ kind: 'melee', level });
     this.items.sort((a, b) => a.level - b.level || ORDER[a.kind] - ORDER[b.kind]);
+  }
+
+  /** 보스 처치 보상 (선택 1회). 같은 보스로 두 번 추가되지 않도록 호출하는 쪽에서 1회만 */
+  addBoss(level: number): void {
+    this.items.push({ kind: 'boss', level });
+    this.sort();
+  }
+
+  /** 추가 강화 카드 1회 (보스 보상) */
+  addUpgrade(level: number): void {
+    this.items.push({ kind: 'upgrade', level });
+    this.sort();
+  }
+
+  private sort(): void {
+    // 맨 앞(지금 화면에 떠 있는 보상)은 그대로 두고 나머지만 정렬
+    const head = this.items.shift();
+    this.items.sort((a, b) => ORDER[a.kind] - ORDER[b.kind] || a.level - b.level);
+    if (head) this.items.unshift(head);
   }
 
   /** 맨 앞 보상 처리 완료 */

@@ -59,13 +59,37 @@ export class EnemyProjectiles {
     const trailGeo = new THREE.ConeGeometry(1, 1, 8, 1, true).rotateX(-Math.PI / 2).translate(0, 0, -0.5);
     const trailMat = new THREE.MeshBasicMaterial({ color: 0x6fe830, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
     const shadowGeo = new THREE.CircleGeometry(1, 16).rotateX(-Math.PI / 2);
-    const shadowMat = new THREE.MeshBasicMaterial({ color: 0x2c5a10, transparent: true, opacity: 0.55, depthWrite: false });
+    const shadowMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6, depthWrite: false });
     this.disposables.push(ballGeo, ballMat, trailGeo, trailMat, shadowGeo, shadowMat);
     this.ball = this.instanced(ballGeo, ballMat, 'spit-ball');
     this.trail = this.instanced(trailGeo, trailMat, 'spit-trail');
     this.trail.renderOrder = 5;
     this.shadow = this.instanced(shadowGeo, shadowMat, 'spit-shadow');
     this.shadow.renderOrder = 2;
+    for (let i = 0; i < CAPACITY; i++) this.shadow.setColorAt(i, this.safeColor);
+  }
+
+  private readonly safeColor = new THREE.Color(0x2c5a10);
+  private readonly dangerColor = new THREE.Color(0xff3a1a);
+  private readonly tmpColor = new THREE.Color();
+  /** 이번 프레임에 플레이어를 향해 오는 것으로 표시한 투사체 수 (테스트) */
+  incoming = 0;
+
+  /**
+   * 이 투사체가 지금 경로 그대로 1.2초 안에 플레이어에게 닿는지 (0~1, 가까울수록 1).
+   * 바닥 그림자를 붉게 · 크게 표시해 접근을 알린다 (판정에는 영향 없음)
+   */
+  private threat(p: Spit): number {
+    const t = this.target;
+    if (!t.isAlive()) return 0;
+    const rx = t.position.x - p.x;
+    const rz = t.position.z - p.z;
+    const along = rx * p.dx + rz * p.dz;
+    if (along <= 0) return 0;
+    const lat = Math.abs(rx * p.dz - rz * p.dx);
+    if (lat > t.radius + p.radius + 0.4) return 0;
+    const time = along / p.speed;
+    return time > 1.2 ? 0 : 1 - time / 1.2;
   }
 
   private instanced(g: THREE.BufferGeometry, mat: THREE.Material, name: string): THREE.InstancedMesh {
@@ -163,6 +187,7 @@ export class EnemyProjectiles {
 
   render(alpha: number): void {
     let n = 0;
+    this.incoming = 0;
     for (const p of this.pool) {
       if (!p.active) continue;
       const x = p.px + (p.x - p.px) * alpha;
@@ -176,16 +201,21 @@ export class EnemyProjectiles {
       const len = Math.min(1.6, 0.3 + p.traveled * 0.5);
       this.m.compose(this.v.set(x, p.y, z), this.q, this.s.set(p.radius * 0.85, p.radius * 0.85, len));
       this.trail.setMatrixAt(n, this.m);
-      // 바닥 그림자: 높이와 관계없이 지면 위치를 보여 줌
+      // 바닥 그림자: 높이와 관계없이 지면 위치를 보여 줌. 플레이어를 향해 오면 붉게 · 크게
+      const danger = this.threat(p);
+      if (danger > 0) this.incoming++;
       this.q.identity();
-      this.m.compose(this.v.set(x, 0.03, z), this.q, this.s.set(p.radius * 1.4, 1, p.radius * 1.4));
+      const sc = p.radius * (1.4 + danger * 1.2);
+      this.m.compose(this.v.set(x, 0.03, z), this.q, this.s.set(sc, 1, sc));
       this.shadow.setMatrixAt(n, this.m);
+      this.shadow.setColorAt(n, this.tmpColor.copy(this.safeColor).lerp(this.dangerColor, Math.min(1, danger * 1.6)));
       n++;
     }
     for (const mesh of [this.ball, this.trail, this.shadow]) {
       mesh.count = n;
       mesh.instanceMatrix.needsUpdate = true;
     }
+    if (this.shadow.instanceColor) this.shadow.instanceColor.needsUpdate = true;
   }
 
   clear(): void {

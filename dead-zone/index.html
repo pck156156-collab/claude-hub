@@ -18,6 +18,12 @@
             <span class="wave-time" id="survive-time">00:00</span>
           </div>
           <div class="wave-progress"><i id="wave-progress"></i></div>
+          <div class="objective" aria-label="생존 목표">
+            <span>다음 웨이브 <b id="obj-next">01:00</b></span>
+            <span>보스 <b id="obj-boss">WAVE 5</b></span>
+            <span>최고 <b id="obj-best">00:00</b></span>
+            <em id="obj-goal"></em>
+          </div>
         </section>
         <section class="hud-boss" id="boss-hud" hidden>
           <div class="boss-name"><span id="boss-name">THE ABOMINATION</span><em id="boss-phase"></em></div>
@@ -103,12 +109,18 @@
             <li><kbd>R</kbd> 재장전 (탄창을 다 쓰면 자동 재장전)</li>
             <li><kbd>F</kbd> 근접 공격 · <kbd>1</kbd><kbd>2</kbd> 또는 마우스 휠로 총기 교체</li>
           </ul>
+          <div class="quality difficulty"><span>난이도</span><div class="difficulty-group"></div></div>
+          <p class="difficulty-note" data-diffnote></p>
           <div class="quality"><span>그래픽 품질</span><div class="quality-group"></div></div>
           <div class="audio-settings">
             <label><span>전체</span><input type="range" min="0" max="100" data-vol="master" /></label>
             <label><span>효과음</span><input type="range" min="0" max="100" data-vol="sfx" /></label>
             <label><span>배경음</span><input type="range" min="0" max="100" data-vol="music" /></label>
             <label class="mute"><input type="checkbox" data-mute /> <span>음소거 (M)</span></label>
+          </div>
+          <div class="game-settings">
+            <label><span>화면 흔들림</span><input type="range" min="0" max="100" step="25" data-shake /></label>
+            <label class="mute"><input type="checkbox" data-dmgnum /> <span>데미지 숫자</span></label>
           </div>
           <p class="quality-note">프레임이 낮으면 '낮음'을 선택하세요. 30FPS 에서 멈춰 있다면 브라우저 · 노트북의 절전 모드를 확인하세요.</p>
           <button id="btn-start" type="button" class="btn">클릭하여 시작</button>
@@ -125,6 +137,10 @@
             <label><span>효과음</span><input type="range" min="0" max="100" data-vol="sfx" /></label>
             <label><span>배경음</span><input type="range" min="0" max="100" data-vol="music" /></label>
             <label class="mute"><input type="checkbox" data-mute /> <span>음소거 (M)</span></label>
+          </div>
+          <div class="game-settings">
+            <label><span>화면 흔들림</span><input type="range" min="0" max="100" step="25" data-shake /></label>
+            <label class="mute"><input type="checkbox" data-dmgnum /> <span>데미지 숫자</span></label>
           </div>
           <p class="quality-note">프레임이 낮으면 '낮음'을 선택하세요. 30FPS 에서 멈춰 있다면 브라우저 · 노트북의 절전 모드를 확인하세요.</p>
           <button id="btn-resume" type="button" class="btn">클릭하여 계속</button>
@@ -157,6 +173,8 @@
           </dl>
           <p class="best" id="go-weapons"></p>
           <p class="best" id="go-best">최고 기록 — 생존 00:00 · 웨이브 1 · 처치 0</p>
+          <div class="quality difficulty"><span>난이도</span><div class="difficulty-group"></div></div>
+          <p class="difficulty-note" data-diffnote></p>
           <button id="btn-restart" type="button" class="btn">다시 시작</button>
         </div>
       </div>

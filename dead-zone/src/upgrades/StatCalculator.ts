@@ -34,13 +34,15 @@ export interface PlayerStats {
 
 /** 능력치 상 · 하한 (무기 기본값 대비 배율) */
 export const STAT_LIMITS = {
-  fireRateMaxMultiplier: 1.8,
-  reloadTimeMinMultiplier: 0.35,
-  moveSpeedMaxMultiplier: 1.6,
-  damageReductionMax: 0.6,
+  /** 8단계: 연사 상한 1.8 → 1.6, 재장전 하한 0.35 → 0.45, 이동 상한 1.6 → 1.45, 방어 곱셈 누적 · 상한 0.5 */
+  fireRateMaxMultiplier: 1.6,
+  reloadTimeMinMultiplier: 0.45,
+  moveSpeedMaxMultiplier: 1.45,
+  damageReductionMax: 0.5,
   critChanceMax: 0.5,
   pickupRadiusMaxMultiplier: 3,
-  meleeIntervalMinMultiplier: 0.5,
+  /** 근접 간격 하한 0.5 → 0.6 (근접 속도 + 흡혈 조합 완화) */
+  meleeIntervalMinMultiplier: 0.6,
   meleeRangeMaxMultiplier: 1.5,
   meleeKnockbackMaxMultiplier: 2,
 };
@@ -59,6 +61,7 @@ export function computeStats(levels: ReadonlyMap<string, number>): PlayerStats {
   const s = (k: string) => sum[k] ?? 0;
   const L = STAT_LIMITS;
   const baseSpeed = PLAYER_CONFIG.moveSpeed;
+  const armorPerLevel = UPGRADES.find((u) => u.effect === 'damageReduction')?.value ?? 0.08;
   const basePick = PROGRESSION_CONFIG.pickupRadius;
   return {
     gunDamagePct: s('damagePct'),
@@ -75,7 +78,7 @@ export function computeStats(levels: ReadonlyMap<string, number>): PlayerStats {
     meleeLifesteal: s('meleeLifesteal'),
     moveSpeed: Math.min(baseSpeed * L.moveSpeedMaxMultiplier, baseSpeed * (1 + s('moveSpeedPct'))),
     maxHealth: PLAYER_CONFIG.maxHealth + s('maxHealth'),
-    damageReduction: Math.min(L.damageReductionMax, s('damageReduction')),
+    damageReduction: Math.min(L.damageReductionMax, 1 - Math.pow(1 - armorPerLevel, (levels.get('armor') ?? 0))),
     pickupRadius: Math.min(basePick * L.pickupRadiusMaxMultiplier, basePick * (1 + s('pickupRadiusPct'))),
     xpMultiplier: 1 + s('xpGainPct'),
   };
@@ -91,10 +94,10 @@ export function computeGunStats(def: GunDef, m: PlayerStats, masteryBonus: numbe
   return {
     ...b,
     damage: b.damage * (1 + m.gunDamagePct + masteryBonus),
-    fireRate: Math.min(b.fireRate * L.fireRateMaxMultiplier, b.fireRate * (1 + m.fireRatePct)),
+    fireRate: Math.min(b.fireRate * (1 + (L.fireRateMaxMultiplier - 1) * def.fireRateScaling), b.fireRate * (1 + m.fireRatePct * def.fireRateScaling)),
     magazineSize: Math.round(b.magazineSize * (1 + m.magazinePct)),
     reloadTime: Math.max(b.reloadTime * L.reloadTimeMinMultiplier, b.reloadTime * (1 - m.reloadTimePct)),
-    pierce: m.pierce,
+    pierce: m.pierce + (def.basePierce ?? 0),
   };
 }
 

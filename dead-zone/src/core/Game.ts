@@ -11,10 +11,13 @@ import { Zombie, ZombieState } from '../enemies/Zombie';
 import { ZombieManager } from '../enemies/ZombieManager';
 import { ZombieRenderer } from '../enemies/ZombieRenderer';
 import { DamageNumbers } from '../ui/DamageNumbers';
+import { ThreatIndicators } from '../ui/ThreatIndicators';
 import { EnemyProjectiles } from '../enemies/EnemyProjectiles';
 import { EnemyTelegraphs } from '../enemies/EnemyTelegraphs';
 import { BossDirector } from '../enemies/BossDirector';
-import { BOSS_REWARD, BossReward } from '../enemies/EnemyData';
+import { BOSS_CONFIG, BOSS_CHOICES, BOSS_REWARD, BossReward, ELITE_REWARD } from '../enemies/EnemyData';
+import { GameSettings, loadSettings, saveSettings } from './Settings';
+import { DIFFICULTIES } from '../config/GameConfig';
 import { slamRadius } from '../enemies/EnemyBehaviors';
 import { DebugPanel } from '../ui/DebugPanel';
 import { GameUI, LoadoutSlot } from '../ui/GameUI';
@@ -80,11 +83,21 @@ export class Game {
   readonly bosses = new BossDirector();
   /** 데미지 숫자 (DOM 풀) */
   readonly damageNumbers: DamageNumbers;
+  /** 화면 밖 위협 방향 표시 (보스 · 엘리트 · 폭발 준비) */
+  readonly threats: ThreatIndicators;
   /** 주변 좀비 울음 · 탱커 발소리 타이머 */
   private groanTimer = 2;
   /** 명중 효과 · 사격 효과 횟수 (테스트: 판정과 효과 연결 확인) */
   hitFx = 0;
   shotsFx = 0;
+  /** 설정 (난이도 · 화면 흔들림 · 데미지 숫자) */
+  readonly settings: GameSettings = loadSettings();
+  /** 보스 보상 선택 기록 · 엘리트 보상 기록 (테스트 · 디버그) */
+  readonly bossChoices: string[] = [];
+  eliteRewards = 0;
+  private lastEliteReward = -1e9;
+  /** 흡혈 회복 예산 (초당 최대 LIFESTEAL_PER_SEC) */
+  private lifestealBudget = LIFESTEAL_PER_SEC;
   private stepTimer = 0;
   /** 보스 처치 보상 (향후 희귀 무기 · 특별 강화). 지급 직후 호출 */
   onBossDefeated: ((reward: BossReward) => void) | null = null;
@@ -166,6 +179,7 @@ export class Game {
     this.enemyShots = new EnemyProjectiles(this.scene, this.world.collision, this.player);
     this.telegraphs = new EnemyTelegraphs(this.scene);
     this.damageNumbers = new DamageNumbers(document.getElementById('app') ?? document.body);
+    this.threats = new ThreatIndicators(document.getElementById('app') ?? document.body);
     this.orbs = new ExperienceOrbs(this.scene);
     this.wireEvents();
     this.upgrades.reset(); // 기본 능력치를 각 시스템에 적용
@@ -244,6 +258,7 @@ export class Game {
       this.accumulator += dt;
       while (this.accumulator >= step && this.state === 'playing') {
         this.player.step(step, cmd, this.world.collision);
+        this.lifestealBudget = Math.min(LIFESTEAL_PER_SEC, this.lifestealBudget + LIFESTEAL_PER_SEC * step);
         // 이동 중 퍼짐: 기본 이동 속도 대비 현재 속도
         this.shooter.moveRatio = this.player.speed / PLAYER_CONFIG.moveSpeed;
         this.player.muzzleZOffset = GUNS[this.weapons.currentId].holdZ;
@@ -282,6 +297,9 @@ export class Game {
     this.setState('playing');
     if (!this.runStarted) {
       this.runStarted = true;
+      // 난이도: 판을 시작할 때 적용 (판 중에는 바뀌지 않음)
+      this.zombies.setMode(DIFFICULTIES[this.settings.difficulty]);
+      this.records.setMode(this.settings.difficulty);
       this.waves.reset(); // 웨이브 1 알림 + 난이도 적용
     }
   }
@@ -313,6 +331,11 @@ export class Game {
     this.audio.setMood('calm');
     this.hitFx = 0;
     this.shotsFx = 0;
+    this.bossChoices.length = 0;
+    this.eliteRewards = 0;
+    this.lastEliteReward = -1e9;
+    this.lifestealBudget = LIFESTEAL_PER_SEC;
+    this.threats.clear();
     this.time = 0;
     this.lastShotTime = -10;
     this.lastRun = null;
@@ -350,6 +373,8 @@ export class Game {
       if (r.kind === 'upgrade') {
         const choices = this.upgrades.rollChoices(this.upgradeContext());
         if (choices.length > 0) { this.levelUp.show(r.level, choices, remaining); return; }
+      } else if (r.kind === 'boss') {
+        this.showBossOffer(remaining); return;
       } else if (r.kind === 'gun') {
         const offers = this.weapons.gunOffers();
         if (offers.length > 0) { this.showGunOffer(offers, r.level, remaining); return; }
@@ -375,6 +400,12 @@ export class Game {
   decideWeaponReward(id: string | null, value: string | null): void {
     const r = this.rewards.current;
     if (this.state !== 'levelup' || !r || r.kind === 'upgrade') return;
+    if (r.kind === 'boss') {
+      this.rewards.complete(); // 먼저 완료 처리 → 보상이 두 번 지급되지 않음
+      this.applyBossChoice(id ?? 'heal');
+      this.showNextReward();
+      return;
+    }
     if (id && r.kind === 'gun' && (value === '0' || value === '1')) {
       const old = GUNS[this.weapons.slots[Number(value) as 0 | 1]].name;
       if (this.weapons.equipGun(id as GunId, Number(value) as 0 | 1)) this.ui.toast(`${GUNS[id as GunId].name} 장착 (${old} 해제)`);
@@ -384,6 +415,51 @@ export class Game {
     }
     this.rewards.complete();
     this.showNextReward();
+  }
+
+  /** 보스 처치 보상 선택지 (체력 회복 · 숙련도 · 추가 강화 중 하나) */
+  private showBossOffer(remaining: number): void {
+    const R = BOSS_CHOICES;
+    const w = this.weapons;
+    const offers: WeaponOffer[] = [
+      {
+        id: 'heal', name: '응급 수혈', role: `체력 ${R.heal} 회복 (최대 체력까지)`, color: '#6fcf5a', label: '회복',
+        stats: [['현재 체력', `${Math.ceil(this.player.health)} / ${this.player.maxHealth}`, ''], ['회복 후', `${Math.min(this.player.maxHealth, Math.ceil(this.player.health + R.heal))}`, 'up']],
+        actions: [{ label: '선택', value: 'pick' }],
+      },
+      {
+        id: 'mastery', name: '전투 경험', role: `장착한 총기 2종 숙련도 +${R.gunMastery} · 근접 +${R.meleeMastery}`, color: '#f0b03a', label: '숙련도',
+        stats: [
+          [GUNS[w.slots[0]].name, `Lv ${w.gunMastery.level(w.slots[0])}`, ''],
+          [GUNS[w.slots[1]].name, `Lv ${w.gunMastery.level(w.slots[1])}`, ''],
+          [MELEE[w.meleeId].name, `Lv ${w.meleeMastery.level(w.meleeId)}`, ''],
+        ],
+        actions: [{ label: '선택', value: 'pick' }],
+      },
+      {
+        id: 'upgrade', name: '추가 강화', role: '강화 카드를 한 번 더 선택합니다', color: '#a855f7', label: '강화',
+        stats: [['보유 강화', `${this.upgrades.ownedCount}종`, '']],
+        actions: [{ label: '선택', value: 'pick' }],
+      },
+    ];
+    this.levelUp.showOffer('BOSS REWARD', '보스 처치 보상 · 하나를 고르세요 (1 · 2 · 3 키)', offers, '', remaining, false);
+  }
+
+  private applyBossChoice(id: string): void {
+    const R = BOSS_CHOICES;
+    const w = this.weapons;
+    if (id === 'mastery') {
+      for (const g of w.slots) w.addMastery('gun', g, R.gunMastery);
+      w.addMastery('melee', w.meleeId, R.meleeMastery);
+      this.ui.toast('보스 보상: 숙련도 경험치 획득');
+    } else if (id === 'upgrade') {
+      this.rewards.addUpgrade(this.experience.levels.level);
+      this.ui.toast('보스 보상: 추가 강화 1회');
+    } else {
+      const healed = this.player.heal(R.heal);
+      this.ui.toast(`보스 보상: 체력 +${Math.round(healed)}`);
+    }
+    this.bossChoices.push(id);
   }
 
   private showGunOffer(ids: GunId[], level: number, remaining: number): void {
@@ -617,10 +693,14 @@ export class Game {
       }
       if (r.crit) this.effects.critSpark(r.spec.point);
       const boss = r.target instanceof Zombie && r.target.stats.kind === 'boss';
-      this.damageNumbers.add(r.spec.point.x, r.spec.point.y + 0.6 + (boss ? 2 : 0), r.spec.point.z, r.dealt, r.crit ? 'crit' : boss ? 'boss' : melee ? 'melee' : 'normal', r.target);
+      if (this.settings.damageNumbers) this.damageNumbers.add(r.spec.point.x, r.spec.point.y + 0.6 + (boss ? 2 : 0), r.spec.point.z, r.dealt, r.crit ? 'crit' : boss ? 'boss' : melee ? 'melee' : 'normal', r.target);
       this.weapons.addMastery(r.spec.kind, r.spec.sourceId, r.dealt);
       if (r.target instanceof Zombie) this.zombies.notifyDamaged(r.target);
-      if (r.killed && melee && this.weapons.meleeStats.lifesteal > 0) this.player.heal(this.weapons.meleeStats.lifesteal);
+      if (r.killed && melee && this.weapons.meleeStats.lifesteal > 0) {
+        // 흡혈: 초당 회복 상한 (근접 속도 + 흡혈 조합이 무적이 되지 않게)
+        const amount = Math.min(this.weapons.meleeStats.lifesteal, this.lifestealBudget);
+        if (amount > 0) { this.player.heal(amount); this.lifestealBudget -= amount; }
+      }
       if (!r.killed) {
         this.ui.flashHit(false, r.crit);
         if (!melee) this.audio.hit(r.crit);
@@ -657,7 +737,7 @@ export class Game {
       this.ui.flashHit(true);
       this.ui.setKills(this.zombies.kills);
       if (z.stats.kind === 'boss') this.rewardBoss(z);
-      else if (z.stats.elite) this.ui.toast(`${z.stats.name} 처치 — 경험치 ${z.stats.xp}`);
+      else if (z.stats.elite) this.rewardElite(z);
     };
     this.zombies.onSpawned = (z) => {
       if (z.stats.elite) { this.ui.toast(`⚠ ${z.stats.name} 출현!`); this.audio.eliteStinger(); }
@@ -738,6 +818,13 @@ export class Game {
     this.ui.onVolume = (kind, v) => this.audio.setVolume(kind, v);
     this.ui.onMute = (m) => { this.audio.muted = m; };
     this.ui.setAudioSettings(this.audio.settings);
+    // 설정: 난이도는 다음 판 시작부터, 흔들림 · 데미지 숫자는 즉시
+    const save = () => { saveSettings(this.settings); this.ui.setGameSettings(this.settings); };
+    this.ui.onDifficulty = (id) => { if (this.state === 'playing' || this.state === 'levelup') return; this.settings.difficulty = id; save(); };
+    this.ui.onShake = (v) => { this.settings.shake = v; this.gameCamera.shakeScale = v; save(); };
+    this.ui.onDamageNumbers = (on) => { this.settings.damageNumbers = on; if (!on) this.damageNumbers.clear(); save(); };
+    this.gameCamera.shakeScale = this.settings.shake;
+    this.ui.setGameSettings(this.settings);
 
     const onBlur = () => this.pause('게임 창이 포커스를 잃어 일시정지했습니다.');
     const onVisibility = () => { if (document.hidden) this.pause('탭이 숨겨져 일시정지했습니다.'); };
@@ -804,6 +891,21 @@ export class Game {
     this.audio.update(dt, Math.min(1, alive / 30));
   }
 
+  /** 생존 목표 패널: 다음 웨이브까지 · 다음 보스 · 현재 목표 · 최고 기록 */
+  private updateObjective(bossAlive: boolean): void {
+    const w = this.waves.wave;
+    const c = BOSS_CONFIG;
+    const nextBoss = w < c.firstWave ? c.firstWave : c.firstWave + Math.ceil((w + 1 - c.firstWave) / c.every) * c.every;
+    const goal = bossAlive ? `보스 처치 — ${this.zombies.boss?.stats.name ?? ''}` : this.waves.time < 120 ? '조작에 익숙해지며 레벨을 올리세요' : `WAVE ${nextBoss} 보스에 대비하세요`;
+    this.ui.setObjective({
+      next: formatTime(this.waves.remaining),
+      boss: bossAlive ? '보스 전투 중' : `WAVE ${nextBoss} (${nextBoss - w}웨이브 후)`,
+      goal,
+      best: formatTime(this.records.best.time),
+      difficulty: DIFFICULTIES[this.settings.difficulty].label,
+    });
+  }
+
   /** 처치 경험치: 일반 경험치 결정으로 떨어뜨림. 큰 경험치(엘리트 · 보스)는 여러 개로 나눠 흩뿌림 */
   private dropXp(z: Zombie): void {
     const xp = z.stats.xp;
@@ -819,11 +921,27 @@ export class Game {
     }
   }
 
+  /** 엘리트 처치 추가 보상: 체력 조금 + 탄창 채움 (쿨다운 동안은 경험치만) */
+  private rewardElite(z: Zombie): void {
+    if (this.time - this.lastEliteReward < ELITE_REWARD.cooldown || this.player.dead) {
+      this.ui.toast(`${z.stats.name} 처치 — 경험치 ${z.stats.xp}`);
+      return;
+    }
+    this.lastEliteReward = this.time;
+    this.eliteRewards++;
+    const healed = this.player.heal(ELITE_REWARD.heal);
+    if (ELITE_REWARD.refillAmmo) for (const id of this.weapons.slots) { const g = this.weapons.gun(id); if (!g.reloading) g.ammo = g.stats.magazineSize; }
+    this.ui.toast(`${z.stats.name} 처치 — 경험치 ${z.stats.xp} · 체력 +${Math.round(healed)} · 탄창 보충`);
+    this.audio.pickup();
+  }
+
   /** 보스 처치 보상: 경험치(결정으로 이미 떨어짐) + 체력 회복(최대 체력까지) + 알림 + 확장 훅 */
   private rewardBoss(z: Zombie): void {
     this.audio.bossDeath();
     const healed = this.player.heal(BOSS_REWARD.heal);
     const reward: BossReward = { xp: z.stats.xp, heal: healed, items: [...BOSS_REWARD.items] };
+    // 추가 선택 보상: 통합 보상 대기열에 1회 (레벨업 · 무기 보상과 같은 화면 흐름)
+    if (!this.player.dead) this.rewards.addBoss(this.experience.levels.level);
     this.lastBossReward = reward;
     this.ui.showAlert('BOSS DEFEATED', `${z.stats.name} 처치 · 경험치 +${reward.xp} · 체력 +${Math.round(healed)}`, 'defeat');
     this.effects.bossRoar(z.position, 0xffc060);
@@ -902,6 +1020,9 @@ export class Game {
     this.telegraphs.update(dt, this.zombies.zombies, this.zombies.context);
     const boss = this.zombies.boss;
     this.ui.setBoss(boss ? { name: boss.stats.name, health: boss.health, maxHealth: boss.maxHealth, phase: boss.phase } : null);
+    this.updateObjective(boss !== null);
+    if (this.state === 'playing') this.threats.update(this.zombies.zombies, this.gameCamera.camera, window.innerWidth, window.innerHeight);
+    else this.threats.clear();
     this.effects.update(dt, this.gameCamera.camera);
 
     this.ui.setWaveStatus(this.waves.wave, this.waves.time, this.zombies.aliveCount);
@@ -962,7 +1083,8 @@ export class Game {
       ['CPU 시간', `${this.cpuMs.toFixed(2)}ms / 프레임`],
       ['그래픽', `${QUALITY_PRESETS[this.quality].label} · 그림자 ${this.renderer.shadowMap.enabled ? 'ON' : 'OFF'}${this.resLock ? ' · 해상도 고정' : ''}`],
       ['GPU', this.gpuName],
-      ['상태', this.state],
+      ['상태', `${this.state} · 난이도 ${DIFFICULTIES[this.settings.difficulty].label} · 보상 대기 ${this.rewards.length}`],
+      ['무기', `${GUNS[this.weapons.currentId].name} (${this.weapons.slots.map((id) => GUNS[id].name).join(' / ')}) · ${MELEE[this.weapons.meleeId].name}`],
       ['위치', `${p.position.x.toFixed(2)}, ${p.position.z.toFixed(2)}`],
       ['속도', `${p.speed.toFixed(2)} / 벽 ${p.touchingWall ? '접촉' : '-'}`],
       ['조준 각도', `${THREE.MathUtils.radToDeg(p.aimYaw).toFixed(1)}° (${p.aimDistance.toFixed(1)}m)`],
@@ -978,6 +1100,7 @@ export class Game {
       ['좀비', `생존 ${this.zombies.aliveCount} · 시체 ${this.zombies.corpseCount} · 처치 ${this.zombies.kills} · 생성 ${this.zombies.spawned} · 화면 밖 ${this.zombieRenderer.culled}`],
       ['적 종류', (['runner', 'spitter', 'tank', 'exploder'] as const).map((k) => `${k} ${this.zombies.aliveOf(k)}`).join(' · ') + ` · 엘리트 ${this.zombies.eliteAlive} · 보스 ${this.zombies.boss ? `${Math.ceil(this.zombies.boss.health)} P${this.zombies.boss.phase}` : '-'}`],
       ['적 투사체', `${this.enemyShots.activeCount} (발사 ${this.enemyShots.stats.fired} · 명중 ${this.enemyShots.stats.hitPlayer} · 벽 ${this.enemyShots.stats.hitWall})`],
+      ['분리 검사', `${this.zombies.separationPairs}쌍 / 스텝 (격자)`],
       ['AI 시간', `${this.zombies.aiMs.toFixed(3)}ms / 스텝 · 경로 ${this.zombies.nav.lastBuildMs.toFixed(2)}ms (${this.zombies.nav.builds}회)`],
       ['렌더 배율', `${this.pixelRatio.toFixed(2)} (${this.renderer.domElement.width}×${this.renderer.domElement.height})`],
       ['드로우콜', String(info.render.calls)],
@@ -988,6 +1111,8 @@ export class Game {
 }
 
 const QUALITY_KEY = 'project-dead-zone.quality';
+/** 흡혈 초당 최대 회복량 */
+const LIFESTEAL_PER_SEC = 12;
 
 function loadQuality(): QualityLevel {
   try {
