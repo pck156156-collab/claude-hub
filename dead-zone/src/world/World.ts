@@ -33,6 +33,19 @@ export class World {
   private readonly batch = new StaticBatch();
   private readonly props: PropFactory;
   private readonly disposables: { dispose(): void }[] = [];
+  /** 판정 없는 장식(잔해 · 쓰레기 · 얼룩)을 24m 구역별로 묶은 것 → 품질에 따라 표시 거리 조절 */
+  private readonly decorCells = new Map<string, { batch: StaticBatch; group: THREE.Group; x: number; z: number }>();
+  private readonly skyline = new THREE.Group();
+  private decorDistance = 80;
+  private decorTimer = 0;
+  /** 불타는 드럼통 (따뜻한 조명 · 불꽃) */
+  private readonly fires: { x: number; z: number; flames: THREE.Mesh[]; light: THREE.PointLight | null; seed: number }[] = [];
+  private clock = 0;
+  /** 공중에 떠도는 재 · 먼지 */
+  private ash: THREE.Points | null = null;
+  private ashVel: Float32Array | null = null;
+  /** 지금 보이는 장식 구역 수 (테스트 · 디버그) */
+  visibleDecorCells = 0;
 
   /**
    * @param reserved 소품을 두지 않을 자리 (x, z, 반경): 시작 지점 · 표적 위치 등
@@ -54,6 +67,104 @@ export class World {
     this.buildSkyline();
 
     this.batch.build(this.root, 'props');
+    for (const [key, c] of this.decorCells) { c.group.name = `decor-${key}`; c.batch.build(c.group, 'decor'); this.root.add(c.group); }
+    this.skyline.name = 'skyline';
+    this.root.add(this.skyline);
+    this.buildAsh();
+  }
+
+  /** (x, z) 가 속한 장식 구역 묶음 */
+  private decorBatch(x: number, z: number): StaticBatch {
+    const cx = Math.floor(x / 24);
+    const cz = Math.floor(z / 24);
+    const key = `${cx},${cz}`;
+    let c = this.decorCells.get(key);
+    if (!c) { c = { batch: new StaticBatch(), group: new THREE.Group(), x: (cx + 0.5) * 24, z: (cz + 0.5) * 24 }; this.decorCells.set(key, c); }
+    return c.batch;
+  }
+
+  /**
+   * 매 프레임 (시각 전용): 불꽃 흔들림 · 불빛 깜빡임 · 재 날림 · 장식 표시 거리.
+   * 충돌 · 판정에는 영향 없음
+   */
+  update(dt: number, focus: THREE.Vector3): void {
+    this.clock += dt;
+    const t = this.clock;
+    for (const f of this.fires) {
+      const n = Math.sin(t * 11 + f.seed) * 0.5 + Math.sin(t * 23 + f.seed * 2) * 0.3 + Math.sin(t * 5.3 + f.seed) * 0.2;
+      f.flames.forEach((m, i) => {
+        m.scale.set(1 + n * 0.08, 1 + n * 0.25 + i * 0.05, 1 + n * 0.08);
+        m.rotation.y = t * (1.5 + i) + f.seed;
+      });
+      if (f.light) f.light.intensity = 9 + n * 3;
+    }
+    if (this.ash && this.ashVel) {
+      const pos = this.ash.geometry.getAttribute('position') as THREE.BufferAttribute;
+      const a = pos.array as Float32Array;
+      for (let i = 0; i < pos.count; i++) {
+        a[i * 3] += (this.ashVel[i * 3] + Math.sin(t * 0.7 + i) * 0.15) * dt;
+        a[i * 3 + 1] += this.ashVel[i * 3 + 1] * dt;
+        a[i * 3 + 2] += this.ashVel[i * 3 + 2] * dt;
+        // 초점 주변 상자 안에서 순환
+        if (a[i * 3 + 1] < 0) a[i * 3 + 1] += 7;
+        if (a[i * 3] - focus.x > 18) a[i * 3] -= 36; else if (a[i * 3] - focus.x < -18) a[i * 3] += 36;
+        if (a[i * 3 + 2] - focus.z > 18) a[i * 3 + 2] -= 36; else if (a[i * 3 + 2] - focus.z < -18) a[i * 3 + 2] += 36;
+      }
+      pos.needsUpdate = true;
+    }
+    this.decorTimer -= dt;
+    if (this.decorTimer <= 0) {
+      this.decorTimer = 0.4;
+      let n = 0;
+      const r = this.decorDistance + 17; // 구역 대각선 반 만큼 여유
+      for (const c of this.decorCells.values()) {
+        c.group.visible = this.decorDistance > 0 && Math.hypot(c.x - focus.x, c.z - focus.z) < r;
+        if (c.group.visible) n++;
+      }
+      this.visibleDecorCells = n;
+    }
+  }
+
+  private buildAsh(): void {
+    const n = 140;
+    const pos = new Float32Array(n * 3);
+    this.ashVel = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      pos[i * 3] = this.rng.range(-18, 18);
+      pos[i * 3 + 1] = this.rng.range(0, 7);
+      pos[i * 3 + 2] = this.rng.range(-18, 18);
+      this.ashVel[i * 3] = this.rng.range(0.2, 0.6);
+      this.ashVel[i * 3 + 1] = -this.rng.range(0.15, 0.45);
+      this.ashVel[i * 3 + 2] = this.rng.range(-0.15, 0.25);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const m = new THREE.PointsMaterial({ color: 0xd8c8b8, size: 0.06, transparent: true, opacity: 0.55, depthWrite: false });
+    this.ash = new THREE.Points(g, m);
+    this.ash.frustumCulled = false;
+    this.ash.name = 'ash';
+    this.root.add(this.ash);
+  }
+
+  /** 불타는 드럼통: 드럼 위 불꽃(가산 혼합 원뿔 3개) + 따뜻한 점광원 (품질에 따라 수 조절) */
+  private addFire(x: number, z: number): void {
+    const mats = [0xff6a1a, 0xffa030, 0xffe080].map((c, i) => new THREE.MeshBasicMaterial({
+      color: c, transparent: true, opacity: 0.85 - i * 0.15, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+    }));
+    const geo = new THREE.ConeGeometry(0.26, 0.7, 7, 1, true).translate(0, 0.35, 0);
+    this.disposables.push(geo, ...mats);
+    const flames: THREE.Mesh[] = [];
+    mats.forEach((mat, i) => {
+      const m = new THREE.Mesh(geo, mat);
+      m.position.set(x, 0.9, z);
+      m.scale.setScalar(1 - i * 0.25);
+      m.renderOrder = 5;
+      this.root.add(m);
+      flames.push(m);
+    });
+    const light = this.fires.length < 4 ? new THREE.PointLight(0xff8a3a, 10, 9, 1.8) : null;
+    if (light) { light.position.set(x, 1.6, z); this.root.add(light); }
+    this.fires.push({ x, z, flames, light, seed: this.fires.length * 1.7 });
   }
 
   /** 그림자 카메라를 플레이어 주변에 맞춘다 (텍셀 단위로 맞춰 그림자 떨림 방지) */
@@ -84,14 +195,24 @@ export class World {
     this.root.removeFromParent();
   }
 
-  private readonly sunDirection = new THREE.Vector3(-0.55, 1, 0.42).normalize();
+  /** 해 질 녘: 낮게 깔린 해 (그림자가 길어지되, 화면을 덮을 만큼 길지는 않게) */
+  private readonly sunDirection = new THREE.Vector3(-0.7, 0.8, 0.5).normalize();
 
+  /**
+   * 해 질 녘 폐허 도시 조명:
+   * - 하늘: 위는 차가운 청회색 → 지평선은 탁한 주황 (화면 고정 그라데이션)
+   * - 환경광: 차가운 하늘빛 + 따뜻한 지면 반사 (적 · 투사체가 잘 보이도록 충분히 밝게)
+   * - 해: 낮고 따뜻한 주황빛, 그림자 있음
+   * - 안개: 지평선 색과 맞춰 먼 곳만 흐리게
+   */
   private buildLighting(scene: THREE.Scene): THREE.DirectionalLight {
-    scene.background = new THREE.Color(0x5d6468);
-    scene.fog = new THREE.Fog(0x5d6468, 42, 105);
-    const hemi = new THREE.HemisphereLight(0xb4c0ca, 0x5a5044, 1.7);
+    const sky = skyTexture();
+    scene.background = sky;
+    this.disposables.push(sky);
+    scene.fog = new THREE.Fog(0x6c6466, 44, 110);
+    const hemi = new THREE.HemisphereLight(0xa4b4cc, 0x5e4c3e, 1.75);
     scene.add(hemi);
-    const sun = new THREE.DirectionalLight(0xffdcb0, 3.0);
+    const sun = new THREE.DirectionalLight(0xffbe86, 3.1);
     sun.castShadow = true;
     sun.shadow.mapSize.set(RENDER_CONFIG.shadowMapSize, RENDER_CONFIG.shadowMapSize);
     const r = RENDER_CONFIG.shadowRadius;
@@ -356,7 +477,17 @@ export class World {
   private streetLights: THREE.PointLight[] = [];
 
   /** 그래픽 품질 적용: 그림자 해상도(0 = 끔) · 가로등 점광원 수. 오브젝트는 다시 만들지 않는다 */
-  setQuality(shadowMapSize: number, streetLights: number): void {
+  /**
+   * @param decor 장식 표시 거리 (0 = 장식 · 먼 실루엣 · 재 숨김)
+   * @param fireLights 불타는 드럼통 점광원 수
+   */
+  setQuality(shadowMapSize: number, streetLights: number, decor = 80, fireLights = 3): void {
+    this.decorDistance = decor;
+    this.decorTimer = 0;
+    this.skyline.visible = decor > 0;
+    if (this.ash) this.ash.visible = decor > 0;
+    let lit = 0;
+    for (const f of this.fires) if (f.light) f.light.visible = lit++ < fireLights;
     const enabled = shadowMapSize > 0;
     this.sun.castShadow = enabled;
     if (enabled && this.sun.shadow.mapSize.x !== shadowMapSize) {
@@ -423,10 +554,8 @@ export class World {
     p.sandbags(-12, 15, Math.PI / 2, 3.6);
 
     // 드럼통
-    p.drumCluster(20, 26, 4);
-    p.drumCluster(-27, 18, 3);
-    p.drumCluster(28, -13, 3);
-    p.drumCluster(-29, -30, 4);
+    const burning = [p.drumCluster(20, 26, 4), p.drumCluster(-27, 18, 3), p.drumCluster(28, -13, 3), p.drumCluster(-29, -30, 4)];
+    for (const placed of burning) if (placed.length) this.addFire(placed[0][0], placed[0][1]);
     p.drumCluster(12, -33, 2);
     p.drum(-10, 10, true);
 
@@ -444,7 +573,7 @@ export class World {
       const x = this.rng.range(-46, 46);
       const z = this.rng.range(-46, 46);
       if (this.isReserved(x, z, 1) || this.collision.overlapsCircle(x, z, 0.8)) continue;
-      p.clutter(x, z);
+      p.withBatch(this.decorBatch(x, z), () => p.clutter(x, z));
     }
   }
 
@@ -463,7 +592,9 @@ export class World {
     for (let i = 0; i < 26; i++) {
       const k = i % 3;
       const s = this.rng.range(1.2, k === 1 ? 3.2 : 2.6);
-      this.batch.add(plane, mats[k], this.rng.range(-46, 46), 0.01, this.rng.range(-46, 46), 0, this.rng.range(0, 6.28), 0, s, 1, s, { cast: false });
+      const dx = this.rng.range(-46, 46);
+      const dz = this.rng.range(-46, 46);
+      this.decorBatch(dx, dz).add(plane, mats[k], dx, 0.01, dz, 0, this.rng.range(0, 6.28), 0, s, 1, s, { cast: false });
     }
   }
 
@@ -471,6 +602,7 @@ export class World {
   private buildSkyline(): void {
     const mat = new THREE.MeshStandardMaterial({ color: 0x3e4245, roughness: 1 });
     const box = new THREE.BoxGeometry(1, 1, 1);
+    const skyBatch = new StaticBatch();
     for (let i = 0; i < 40; i++) {
       const side = i % 4;
       const a = this.rng.range(-70, 70);
@@ -479,7 +611,26 @@ export class World {
       const [x, z] = side === 0 ? [a, -off] : side === 1 ? [a, off] : side === 2 ? [-off, a] : [off, a];
       const w = this.rng.range(6, 14);
       const h = this.rng.range(8, 30);
-      this.batch.add(box, mat, x, h / 2, z, 0, 0, 0, w, h, this.rng.range(6, 14), { cast: false, receive: false });
+      skyBatch.add(box, mat, x, h / 2, z, 0, 0, 0, w, h, this.rng.range(6, 14), { cast: false, receive: false });
     }
+    skyBatch.build(this.skyline, 'skyline');
   }
+}
+
+/** 하늘 그라데이션 (화면 고정 배경): 위 차가운 청회색 → 지평선 주황빛 */
+function skyTexture(): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = 4;
+  c.height = 256;
+  const g = c.getContext('2d')!;
+  const grad = g.createLinearGradient(0, 0, 0, 256);
+  grad.addColorStop(0, '#3e4a5c');
+  grad.addColorStop(0.55, '#6a6670');
+  grad.addColorStop(0.85, '#94705a');
+  grad.addColorStop(1, '#a87a58');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 4, 256);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
 }

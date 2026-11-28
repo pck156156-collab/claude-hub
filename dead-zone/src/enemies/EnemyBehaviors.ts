@@ -259,6 +259,7 @@ const boss: EnemyBehavior = {
     if (z.cdB <= 0 && z.hasLos && m.dist >= b.chargeMinDist && m.dist <= b.chargeMaxDist) {
       z.setSpecial('chargePrep');
       z.lockLen = chargeLength(z, ctx);
+      ctx.events.emit('chargePrep', z);
       return true;
     }
     return bossMove(z, _dt, ctx, m);

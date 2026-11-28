@@ -347,7 +347,13 @@ export class PlayerModel {
   /** 피격: 몸이 붉게 번쩍임 */
   flashHurt(): void {
     this.hurt = 1;
+    this.flinch = 1;
+    this.flinchSide = Math.random() * Math.PI * 2;
   }
+
+  /** 피격 움찔 (0~1, 빠르게 감쇠) */
+  private flinch = 0;
+  private flinchSide = 0;
 
   /** 사망 시작 / 해제 */
   setDead(dead: boolean): void {
@@ -472,8 +478,11 @@ export class PlayerModel {
     const wantAim = s.aiming && !s.reloading && !melee && s.switchProgress < 0 ? 1 : 0;
     this.aimBlend += (wantAim - this.aimBlend) * damp(wantAim > this.aimBlend ? 22 : 4, dt);
 
-    // ── 반동: 사격 순간 뒤로 밀렸다가 빠르게 복귀
-    this.recoil *= Math.exp(-EFFECTS_CONFIG.recoilRecovery * dt);
+    // ── 반동: 사격 순간 뒤로 밀렸다가 총기별 속도로 복귀 (샷건은 묵직하게 천천히, SMG 는 빠르게).
+    //    재장전 중에는 반동을 바로 없앤다. 반동은 모델만 움직이고 총알 방향(조준)에는 영향 없음
+    const rec = s.reloading ? 30 : (GUNS[this.shownGun]?.fx.recoilRecover ?? EFFECTS_CONFIG.recoilRecovery);
+    this.recoil *= Math.exp(-rec * dt);
+    this.flinch *= Math.exp(-9 * dt);
 
     // ── 재장전 동작 진행도
     const rp = s.reloading ? s.reloadProgress : 0;
@@ -493,7 +502,9 @@ export class PlayerModel {
     );
     this.gun.rotation.set(low * 0.55 - this.recoil * 1.1 - rw * 0.2 + dip * 0.9 + mb * 0.3, low * 0.25 + rw * 0.1 + mb * 0.3, rw * 0.55 + dip * 0.4);
     let chestYaw = CHEST_TWIST * (0.55 + 0.45 * this.aimBlend);
-    this.chest.rotation.x = -this.recoil * 0.4;
+    // 피격 시 상체가 뒤로 움찔 (조준 방향 유지)
+    this.chest.rotation.x = -this.recoil * 0.4 - this.flinch * 0.22;
+    this.chest.rotation.z = this.flinch * 0.12 * Math.sin(this.flinchSide);
 
     // ── 근접 휘두르기 경로 (상체 좌표): 손 위치 · 무기 방향
     const meleePose = melee ? meleePath(MELEE[s.swingId].style, s.meleeProgress, s.swingHitFraction, this.kMeleeHand, this.kMeleeDir) : null;

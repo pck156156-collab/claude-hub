@@ -40,6 +40,7 @@ export class GunShooter {
     spec.minFalloff = st.minFalloff;
     spec.tracerColor = def.tracerColor;
     spec.tracerWidth = def.tracerWidth;
+    spec.tracerLength = def.fx.tracerLength;
     spec.elapsed = shot.elapsed;
     const spread = THREE.MathUtils.degToRad(st.spreadDeg + st.moveSpreadDeg * Math.min(1, Math.max(0, this.moveRatio)));
     const n = Math.max(1, st.pellets);

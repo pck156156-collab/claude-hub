@@ -22,6 +22,8 @@ export interface BulletSpec {
   /** 궤적 색 · 굵기 */
   tracerColor: number;
   tracerWidth: number;
+  /** 궤적 길이 (없으면 기본값) */
+  tracerLength?: number;
   /** 저프레임 보정: 발사 후 이미 흐른 시간 */
   elapsed: number;
 }
@@ -55,6 +57,7 @@ interface Projectile {
   falloffEnd: number;
   minFalloff: number;
   width: number;
+  tracerLength: number;
   /** 남은 추가 관통 수 */
   pierceLeft: number;
   /** 이 탄이 이미 맞힌 대상 (같은 좀비에게 두 번 피해 주지 않음) */
@@ -100,7 +103,7 @@ export class ProjectileSystem {
       scene.add(mesh);
       this.pool.push({
         active: false, dying: false, pos: new THREE.Vector3(), prev: new THREE.Vector3(), dir: new THREE.Vector3(),
-        speed: 0, traveled: 0, range: 0, damage: 0, sourceId: '', attackId: 0, knockback: 0, falloffStart: 999, falloffEnd: 999, minFalloff: 1, width: 0.08,
+        speed: 0, traveled: 0, range: 0, damage: 0, sourceId: '', attackId: 0, knockback: 0, falloffStart: 999, falloffEnd: 999, minFalloff: 1, width: 0.08, tracerLength: 2.2,
         pierceLeft: 0, hits: [], mesh,
       });
     }
@@ -155,6 +158,7 @@ export class ProjectileSystem {
     p.falloffEnd = shot.falloffEnd;
     p.minFalloff = shot.minFalloff;
     p.width = shot.tracerWidth;
+    p.tracerLength = shot.tracerLength ?? PROJECTILE_CONFIG.tracerLength;
     p.mesh.material = this.materialFor(shot.tracerColor);
     p.pierceLeft = shot.pierce;
     p.hits.length = 0;
@@ -175,14 +179,13 @@ export class ProjectileSystem {
 
   /** 렌더: 이전 위치와 현재 위치 사이를 보간해 궤적을 그린다 */
   render(alpha: number): void {
-    const L = PROJECTILE_CONFIG.tracerLength;
     for (const p of this.pool) {
       const show = p.active || p.dying;
       p.mesh.visible = show;
       if (!show) continue;
       const head = this.tmp.lerpVectors(p.prev, p.pos, p.dying ? 1 : alpha);
       const traveled = Math.max(0.05, p.traveled - (p.dying ? 0 : (1 - alpha) * p.prev.distanceTo(p.pos)));
-      const len = Math.min(L, traveled);
+      const len = Math.min(p.tracerLength, traveled);
       p.mesh.position.copy(head);
       p.mesh.rotation.set(0, Math.atan2(p.dir.x, p.dir.z), 0);
       p.mesh.scale.set(p.width, p.width, len);

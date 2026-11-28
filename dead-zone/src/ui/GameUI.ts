@@ -81,11 +81,19 @@ export class GameUI {
   private readonly qualityButtons: HTMLButtonElement[] = [];
   onResume: (() => void) | null = null;
   onRestart: (() => void) | null = null;
+  /** 소리 설정 변경 (슬라이더 · 음소거) */
+  onVolume: ((kind: 'master' | 'sfx' | 'music', value: number) => void) | null = null;
+  onMute: ((muted: boolean) => void) | null = null;
 
   constructor() {
     $('btn-start').addEventListener('click', () => this.onStart?.());
     $('btn-resume').addEventListener('click', () => this.onResume?.());
     $('btn-restart').addEventListener('click', () => this.onRestart?.());
+    for (const el of document.querySelectorAll<HTMLInputElement>('[data-vol]')) {
+      el.addEventListener('input', () => this.onVolume?.(el.dataset.vol as 'master' | 'sfx' | 'music', Number(el.value) / 100));
+      el.addEventListener('keydown', (e) => e.stopPropagation());
+    }
+    for (const el of document.querySelectorAll<HTMLInputElement>('[data-mute]')) el.addEventListener('change', () => this.onMute?.(el.checked));
     for (const group of document.querySelectorAll('.quality-group')) {
       for (const [level, preset] of Object.entries(QUALITY_PRESETS)) {
         const b = document.createElement('button');
@@ -98,6 +106,12 @@ export class GameUI {
         this.qualityButtons.push(b);
       }
     }
+  }
+
+  /** 소리 설정 화면 값 동기화 (시작 · 일시정지 화면 양쪽) */
+  setAudioSettings(st: { master: number; sfx: number; music: number; muted: boolean }): void {
+    for (const el of document.querySelectorAll<HTMLInputElement>('[data-vol]')) el.value = String(Math.round(st[el.dataset.vol as 'master' | 'sfx' | 'music'] * 100));
+    for (const el of document.querySelectorAll<HTMLInputElement>('[data-mute]')) el.checked = st.muted;
   }
 
   showScreen(name: 'start' | 'pause' | 'gameover' | 'error' | null, reason = ''): void {

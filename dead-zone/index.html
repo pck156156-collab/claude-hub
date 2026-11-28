@@ -8,6 +8,7 @@
   <body>
     <div id="app">
       <canvas id="game-canvas"></canvas>
+      <div id="post-fx" class="post-fx"></div>
 
       <div id="damage-vignette" class="damage-vignette"></div>
       <div id="hud" class="hud">
@@ -92,7 +93,7 @@
 
       <div id="screen-start" class="screen">
         <div class="panel">
-          <p class="kicker">ZOMBIE SURVIVAL · STAGE 5 PROTOTYPE</p>
+          <p class="kicker">ZOMBIE SURVIVAL · ROGUELIKE ACTION</p>
           <h2>PROJECT <span>DEAD ZONE</span></h2>
           <p class="lead">폐허가 된 도시. 총 두 자루와 근접 무기로 좀비를 처치하며 살아남으세요.</p>
           <ul class="howto">
@@ -103,6 +104,12 @@
             <li><kbd>F</kbd> 근접 공격 · <kbd>1</kbd><kbd>2</kbd> 또는 마우스 휠로 총기 교체</li>
           </ul>
           <div class="quality"><span>그래픽 품질</span><div class="quality-group"></div></div>
+          <div class="audio-settings">
+            <label><span>전체</span><input type="range" min="0" max="100" data-vol="master" /></label>
+            <label><span>효과음</span><input type="range" min="0" max="100" data-vol="sfx" /></label>
+            <label><span>배경음</span><input type="range" min="0" max="100" data-vol="music" /></label>
+            <label class="mute"><input type="checkbox" data-mute /> <span>음소거 (M)</span></label>
+          </div>
           <p class="quality-note">프레임이 낮으면 '낮음'을 선택하세요. 30FPS 에서 멈춰 있다면 브라우저 · 노트북의 절전 모드를 확인하세요.</p>
           <button id="btn-start" type="button" class="btn">클릭하여 시작</button>
         </div>
@@ -113,6 +120,12 @@
           <h2>일시정지</h2>
           <p class="lead" id="pause-reason">게임이 일시정지되었습니다.</p>
           <div class="quality"><span>그래픽 품질</span><div class="quality-group"></div></div>
+          <div class="audio-settings">
+            <label><span>전체</span><input type="range" min="0" max="100" data-vol="master" /></label>
+            <label><span>효과음</span><input type="range" min="0" max="100" data-vol="sfx" /></label>
+            <label><span>배경음</span><input type="range" min="0" max="100" data-vol="music" /></label>
+            <label class="mute"><input type="checkbox" data-mute /> <span>음소거 (M)</span></label>
+          </div>
           <p class="quality-note">프레임이 낮으면 '낮음'을 선택하세요. 30FPS 에서 멈춰 있다면 브라우저 · 노트북의 절전 모드를 확인하세요.</p>
           <button id="btn-resume" type="button" class="btn">클릭하여 계속</button>
         </div>

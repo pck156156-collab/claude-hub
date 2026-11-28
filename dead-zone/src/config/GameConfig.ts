@@ -373,15 +373,21 @@ export const EFFECTS_CONFIG = {
  * - maxPixelRatio: 렌더 배율 상한 (픽셀 수 = 배율²)
  */
 export const QUALITY_PRESETS = {
-  high: { label: '높음', shadowMapSize: 2048, streetLights: 3, maxPixelRatio: 1.5 },
-  medium: { label: '중간', shadowMapSize: 1024, streetLights: 1, maxPixelRatio: 1.0 },
-  low: { label: '낮음', shadowMapSize: 0, streetLights: 0, maxPixelRatio: 0.85 },
+  // particles: 시각 파티클 양 배율 · decor: 판정 없는 장식(잔해 · 얼룩 · 먼 실루엣) 표시 거리(0 = 숨김)
+  // post: 화면 후처리(비네트 · 색 보정) · fireLights: 불타는 드럼통 조명 수 · damageNumbers: 동시 데미지 숫자 수
+  high: { label: '높음', shadowMapSize: 2048, streetLights: 3, maxPixelRatio: 1.5, particles: 1, decor: 80, post: true, fireLights: 3, damageNumbers: 36 },
+  medium: { label: '보통', shadowMapSize: 1024, streetLights: 1, maxPixelRatio: 1.0, particles: 0.75, decor: 45, post: true, fireLights: 2, damageNumbers: 28 },
+  low: { label: '낮음', shadowMapSize: 0, streetLights: 0, maxPixelRatio: 0.85, particles: 0.45, decor: 0, post: false, fireLights: 0, damageNumbers: 18 },
 } as const;
 export type QualityLevel = keyof typeof QUALITY_PRESETS;
 export const DEFAULT_QUALITY: QualityLevel = 'medium';
 
 export const AUDIO_CONFIG = {
   masterVolume: 0.35,
+  /** 배경음 · 환경음 기본 크기 (효과음보다 작게) */
+  musicVolume: 0.55,
+  /** 동시에 재생할 수 있는 효과음 수 (넘으면 중요하지 않은 소리는 생략) */
+  maxVoices: 24,
 };
 
 export const RENDER_CONFIG = {

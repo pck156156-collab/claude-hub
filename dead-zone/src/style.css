@@ -409,3 +409,38 @@ h2 { margin: 8px 0 12px; font-size: clamp(22px, 4.6vw, 30px); letter-spacing: 0.
 .alert-banner.phase .ab-title { color: #ff2a55; }
 .alert-banner.defeat .ab-title { color: #ffd060; }
 .alert-banner.defeat .ab-sub { color: #9fe07a; }
+
+/* ── 7단계: 데미지 숫자 · 후처리 · 소리 설정 · HUD 정리 */
+:root {
+  --gold: #f0b03a;
+  --cool: #9fe8ff;
+  --melee: #ffb347;
+}
+.dmg-layer { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 3; }
+.dmg {
+  position: absolute; left: 0; top: 0; will-change: transform, opacity;
+  font: 800 15px/1 'Segoe UI', system-ui, sans-serif; color: #f4f1ea; font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 3px #000, 0 1px 2px #000, 0 0 6px rgba(0, 0, 0, 0.6);
+}
+.dmg.crit { color: #ffd23a; font-size: 21px; }
+.dmg.melee { color: var(--melee); font-size: 17px; }
+.dmg.boss { color: #ff8a6a; font-size: 19px; -webkit-text-stroke: 0.6px #5a0a06; }
+
+/* 후처리 (그래픽 '보통' 이상): 가장자리 비네트 + 해 질 녘 색 보정. 화면 중앙은 그대로 → 전투 가독성 유지 */
+.post-fx { position: absolute; inset: 0; pointer-events: none; display: none; }
+.post .post-fx {
+  display: block;
+  background:
+    radial-gradient(ellipse at 50% 55%, rgba(0, 0, 0, 0) 55%, rgba(8, 6, 10, 0.42) 100%),
+    linear-gradient(180deg, rgba(70, 90, 130, 0.08) 0%, rgba(0, 0, 0, 0) 40%, rgba(150, 90, 40, 0.07) 100%);
+}
+
+.audio-settings { display: grid; grid-template-columns: repeat(3, 1fr) auto; gap: 6px 12px; align-items: center; margin: 10px 0 4px; font-size: 12px; color: var(--ink-dim); }
+.audio-settings label { display: flex; flex-direction: column; gap: 3px; text-align: left; }
+.audio-settings label.mute { flex-direction: row; align-items: center; gap: 5px; white-space: nowrap; }
+.audio-settings input[type='range'] { width: 100%; accent-color: var(--accent); }
+
+/* 조작 안내는 플레이 중 흐리게 (조준 방해 최소화), 마우스를 올리지 않아도 읽을 수는 있게 */
+.playing .hud-bl { opacity: 0.45; transition: opacity 1.5s 6s; }
+.hud .stat, .hud .wave-box, .hud .health, .hud .slot, .hud .controls, .boss-bar { backdrop-filter: blur(2px); }
+.toast { z-index: 4; }

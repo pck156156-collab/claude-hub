@@ -16,6 +16,12 @@ export class Effects {
   private readonly flash: THREE.Group;
   private readonly flashLight: THREE.PointLight;
   private flashTimer = 0;
+  private flashDuration = EFFECTS_CONFIG.muzzleFlashTime;
+
+  /** 그래픽 품질: 파티클 양 배율 */
+  setDensity(d: number): void {
+    for (const p of [this.sparks, this.debris, this.casings, this.smoke]) p.density = d;
+  }
   private readonly scene: THREE.Scene;
 
   constructor(scene: THREE.Scene) {
@@ -58,13 +64,13 @@ export class Effects {
    * @param scale 총기별 화염 크기 (권총 0.7 ~ 샷건 1.6)
    * @param shell 샷건 = 붉은 산탄 탄피
    */
-  muzzleFlash(pos: THREE.Vector3, yaw: number, ejectPos: THREE.Vector3, scale = 1, shell = false): void {
+  muzzleFlash(pos: THREE.Vector3, yaw: number, ejectPos: THREE.Vector3, scale = 1, shell = false, flashTime = EFFECTS_CONFIG.muzzleFlashTime): void {
     this.flash.position.copy(pos);
     this.flash.rotation.set(0, yaw, Math.random() * Math.PI);
     const s = (0.8 + Math.random() * 0.45) * scale;
     this.flash.scale.set(s, s, s * (0.9 + Math.random() * 0.5));
     this.flash.visible = true;
-    this.flashTimer = EFFECTS_CONFIG.muzzleFlashTime;
+    this.flashTimer = this.flashDuration = flashTime;
     this.flashLight.position.copy(pos);
     this.flashLight.color.setHex(0xffb45c);
     this.lightTimer = 0;
@@ -123,8 +129,14 @@ export class Effects {
   /**
    * 좀비 피격: 피격 지점의 짙은 색 튐 + 작은 먼지. 잔혹함보다 "맞았다" 는 피드백 위주.
    */
-  impactFlesh(point: THREE.Vector3, direction: THREE.Vector3): void {
-    for (let i = 0; i < 6; i++) {
+  impactFlesh(point: THREE.Vector3, direction: THREE.Vector3, scale = 1): void {
+    // 명중 순간 밝은 섬광 (항상 표시 → 피해가 들어가면 반드시 보이는 반응)
+    this.sparks.spawn({
+      x: point.x - direction.x * 0.05, y: point.y, z: point.z - direction.z * 0.05, vx: 0, vy: 0, vz: 0,
+      life: 0.06, size: 1, endScale: 0.3, shape: [0.22 * scale, 0.22 * scale, 0.22 * scale], color: tmpColor.setRGB(1.6, 0.9, 0.7),
+    }, true);
+    const n = Math.max(2, Math.round(6 * scale));
+    for (let i = 0; i < n; i++) {
       this.debris.spawn({
         x: point.x, y: point.y, z: point.z,
         vx: direction.x * (1.5 + Math.random() * 2.5) + (Math.random() - 0.5) * 2.2,
@@ -147,8 +159,23 @@ export class Effects {
     }
   }
 
-  /** 치명타: 노란 불꽃 */
+  /** 처치 확인: 몸 높이의 짧은 흰 고리 + 불꽃 (엘리트는 금색 · 크게) */
+  killPop(center: THREE.Vector3, scale = 1, elite = false): void {
+    this.shockwave(center.x, center.z, 1.2 * scale, elite ? 0xffc23a : 0xfff0e0, 0.25, elite ? 0.9 : 0.5);
+    for (let i = 0; i < (elite ? 16 : 6); i++) {
+      const v = randomHemisphere(new THREE.Vector3(0, 1, 0), 1);
+      const sp = 2 + Math.random() * 3;
+      this.sparks.spawn({
+        x: center.x, y: 1.0 * scale, z: center.z, vx: v.x * sp, vy: v.y * sp, vz: v.z * sp,
+        life: 0.25, size: 1, endScale: 0.2, drag: 3, stretch: 0.02, shape: [0.04, 0.04, 0.08],
+        color: elite ? tmpColor.setRGB(1.8, 1.3, 0.3) : tmpColor.setRGB(1.4, 1.3, 1.2),
+      });
+    }
+  }
+
+  /** 치명타: 노란 불꽃 + 작은 노란 고리 */
   critSpark(point: THREE.Vector3): void {
+    this.shockwave(point.x, point.z, 0.9, 0xffd23a, 0.18, 0.9);
     for (let i = 0; i < 10; i++) {
       const v = randomHemisphere(new THREE.Vector3(0, 1, 0), 1);
       const sp = 3 + Math.random() * 4;
@@ -394,7 +421,7 @@ export class Effects {
     }
     if (this.flashTimer > 0) {
       this.flashTimer -= dt;
-      const k = Math.max(0, this.flashTimer / EFFECTS_CONFIG.muzzleFlashTime);
+      const k = Math.max(0, this.flashTimer / this.flashDuration);
       this.flashLight.intensity = 14 * k;
       if (this.flashTimer <= 0) {
         this.flash.visible = false;

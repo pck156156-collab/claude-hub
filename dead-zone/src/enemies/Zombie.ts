@@ -17,7 +17,7 @@ export enum ZombieState {
 
 /** 적 행동이 게임에 알리는 사건 (이펙트 · 사운드 · 알림). 피해 판정은 행동 모듈이 직접 한다 */
 export type EnemyEventType =
-  | 'explode' | 'prime' | 'slam' | 'bossSwing' | 'chargeStart' | 'chargeHit' | 'chargeWall' | 'roar' | 'phase2' | 'spitWindup' | 'dash';
+  | 'explode' | 'prime' | 'slam' | 'bossSwing' | 'chargePrep' | 'chargeStart' | 'chargeHit' | 'chargeWall' | 'roar' | 'phase2' | 'spitWindup' | 'dash';
 
 export interface EnemyEvents {
   /** 지금 독성 투사체를 쏠 수 있는지 (동시 투사체 수 · 발사 간격 제한) */
@@ -282,7 +282,9 @@ export class Zombie implements Damageable {
     }
     this.health = Math.max(0, this.health - hit.damage);
     this.flash = 1;
-    this.hitKick = 1;
+    const resistK = Math.min(1, Math.max(0, this.stats.knockbackResistance ?? 0));
+    // 피격 반동 연출: 넉백이 셀수록 크게 젖혀짐 (방망이 · 도끼). 넉백 저항만큼 줄어듦
+    this.hitKick = Math.max(this.hitKick, Math.min(2, 0.7 + (hit.knockback ?? this.stats.knockback) * 0.2) * (1 - resistK * 0.7));
     const resist = Math.min(1, Math.max(0, this.stats.knockbackResistance ?? 0));
     const k = (hit.knockback ?? this.stats.knockback) * (1 - resist);
     this.knockX += hit.direction.x * k;

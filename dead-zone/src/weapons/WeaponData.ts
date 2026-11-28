@@ -53,6 +53,11 @@ export interface GunDef {
    * 총구 위치도 같이 움직이므로 탄은 항상 보이는 총구에서 나간다.
    */
   holdZ: number;
+  /**
+   * 사격 연출 (시각 · 판정 무관): 총구 화염 지속(초) · 화면 충격(카메라만, 조준에 영향 없음) ·
+   * 궤적 길이 · 탄착 이펙트 크기 · 반동 복귀 속도(클수록 빨리 돌아옴)
+   */
+  fx: { flashTime: number; shake: number; tracerLength: number; impactScale: number; recoilRecover: number };
 }
 
 export const GUNS: Record<GunId, GunDef> = {
@@ -62,6 +67,7 @@ export const GUNS: Record<GunId, GunDef> = {
     projectileSpeed: 70, range: 40, spreadDeg: 0.25, moveSpreadDeg: 0.6, pelletConeDeg: 0,
     falloffStart: 999, falloffEnd: 999, minFalloff: 1, knockback: 2.2, recoil: 0.05, flashScale: 0.7,
     tracerColor: 0xffe2a0, tracerWidth: 0.06, soundPitch: 1.35, soundBody: 0.45, rangeLabel: '중거리', holdZ: -0.45,
+    fx: { flashTime: 0.045, shake: 0.035, tracerLength: 2.0, impactScale: 1, recoilRecover: 22 },
   },
   viper: {
     id: 'viper', name: 'Viper SMG', role: '매우 빠른 연사 · 이동 사격에 유리',
@@ -69,6 +75,7 @@ export const GUNS: Record<GunId, GunDef> = {
     projectileSpeed: 58, range: 32, spreadDeg: 3.2, moveSpreadDeg: 0.4, pelletConeDeg: 0,
     falloffStart: 999, falloffEnd: 999, minFalloff: 1, knockback: 1.2, recoil: 0.04, flashScale: 0.65,
     tracerColor: 0xfff0b0, tracerWidth: 0.05, soundPitch: 1.5, soundBody: 0.3, rangeLabel: '근 · 중거리', holdZ: -0.2,
+    fx: { flashTime: 0.035, shake: 0.015, tracerLength: 1.5, impactScale: 0.7, recoilRecover: 28 },
   },
   ar12: {
     id: 'ar12', name: 'AR-12 돌격소총', role: '균형 잡힌 화력 · 중거리 전투',
@@ -76,6 +83,7 @@ export const GUNS: Record<GunId, GunDef> = {
     projectileSpeed: 60, range: 45, spreadDeg: 0.8, moveSpreadDeg: 1.4, pelletConeDeg: 0,
     falloffStart: 999, falloffEnd: 999, minFalloff: 1, knockback: 2.6, recoil: 0.09, flashScale: 1,
     tracerColor: 0xffd28a, tracerWidth: 0.08, soundPitch: 1, soundBody: 0.7, rangeLabel: '중 · 원거리', holdZ: 0,
+    fx: { flashTime: 0.05, shake: 0.03, tracerLength: 2.4, impactScale: 1, recoilRecover: 18 },
   },
   bulldog: {
     id: 'bulldog', name: 'Bulldog 샷건', role: '산탄 8발 · 근거리 고화력 · 멀수록 약함',
@@ -83,6 +91,7 @@ export const GUNS: Record<GunId, GunDef> = {
     projectileSpeed: 55, range: 17, spreadDeg: 1, moveSpreadDeg: 1, pelletConeDeg: 26,
     falloffStart: 5, falloffEnd: 16, minFalloff: 0.4, knockback: 1.6, recoil: 0.17, flashScale: 1.6,
     tracerColor: 0xffb070, tracerWidth: 0.05, soundPitch: 0.7, soundBody: 1.1, rangeLabel: '근거리', holdZ: -0.04,
+    fx: { flashTime: 0.08, shake: 0.11, tracerLength: 1.2, impactScale: 0.55, recoilRecover: 9 },
   },
   titan: {
     id: 'titan', name: 'Titan LMG', role: '탄창 100발 · 지속 화력 · 긴 재장전',
@@ -90,6 +99,7 @@ export const GUNS: Record<GunId, GunDef> = {
     projectileSpeed: 65, range: 45, spreadDeg: 2.8, moveSpreadDeg: 2.6, pelletConeDeg: 0,
     falloffStart: 999, falloffEnd: 999, minFalloff: 1, knockback: 2.4, recoil: 0.12, flashScale: 1.25,
     tracerColor: 0xffa860, tracerWidth: 0.09, soundPitch: 0.85, soundBody: 0.9, rangeLabel: '중 · 원거리', holdZ: 0,
+    fx: { flashTime: 0.06, shake: 0.045, tracerLength: 2.8, impactScale: 1.2, recoilRecover: 14 },
   },
 };
 

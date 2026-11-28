@@ -78,7 +78,11 @@ export class ParticlePool {
     return this.n;
   }
 
-  spawn(o: ParticleSpawn): void {
+  /** 그래픽 품질에 따른 파티클 양 (0~1). 시각 효과만 줄고 판정과는 무관 */
+  density = 1;
+
+  spawn(o: ParticleSpawn, essential = false): void {
+    if (!essential && this.density < 1 && Math.random() > this.density) return;
     const i = this.cursor;
     this.cursor = (this.cursor + 1) % this.n;
     this.px[i] = o.x; this.py[i] = o.y; this.pz[i] = o.z;

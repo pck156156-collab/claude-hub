@@ -181,7 +181,7 @@ export class ZombieRenderer {
       // 체력 바: 피해를 입은 좀비 · 엘리트(항상, 금색 테두리). 보스는 화면 상단 대형 바
       const elite = z.stats.elite;
       if (z.alive && z.stats.kind !== 'boss' && (elite || z.health < z.maxHealth)) {
-        const ratio = z.health / z.maxHealth;
+        const ratio = Math.min(1, Math.max(0, z.health / z.maxHealth));
         const w = elite ? 1.2 : 0.8;
         const h = elite ? 0.13 : 0.08;
         const base = this.v.lerpVectors(z.prevPosition, z.position, alpha).setY(2.05 * sc + 0.1).addScaledVector(this.right, -w / 2);

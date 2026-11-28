@@ -13,7 +13,7 @@ export class PropFactory {
   private readonly geo: Record<string, THREE.BufferGeometry>;
   private readonly carPaints: THREE.MeshStandardMaterial[];
 
-  constructor(private readonly batch: StaticBatch, private readonly collision: CollisionWorld, private readonly rng: Random) {
+  constructor(private batch: StaticBatch, private readonly collision: CollisionWorld, private readonly rng: Random) {
     const rust = rustTexture(31, '#6a6a66');
     this.mats = {
       concrete: new THREE.MeshStandardMaterial({ color: 0x9a978f, roughness: 0.95 }),
@@ -166,7 +166,8 @@ export class PropFactory {
     }
   }
 
-  drumCluster(x: number, z: number, count: number) {
+  /** @returns 세워 놓은 드럼통 위치 (불타는 드럼통 연출용) */
+  drumCluster(x: number, z: number, count: number): [number, number][] {
     const r = this.rng;
     const placed: [number, number][] = [];
     for (let i = 0; i < count; i++) {
@@ -181,6 +182,7 @@ export class PropFactory {
       }
     }
     if (r.chance(0.6)) this.drum(x + r.range(1.4, 1.9), z + r.range(-0.5, 0.5), true);
+    return placed;
   }
 
   /** 나무 상자 더미 */
@@ -238,6 +240,13 @@ export class PropFactory {
     if (state !== 'on') return null;
     const p = new THREE.Vector3(1.75, h - 0.35, 0).applyMatrix4(m);
     return p;
+  }
+
+  /** 이 안에서 만든 지오메트리는 지정한 묶음(batch)으로 들어간다 (장식을 구역별로 나눠 표시 거리 조절) */
+  withBatch<T>(batch: StaticBatch, fn: () => T): T {
+    const prev = this.batch;
+    this.batch = batch;
+    try { return fn(); } finally { this.batch = prev; }
   }
 
   /** 잔해 더미 (콘크리트 덩어리 + 철근) */
